@@ -5,6 +5,8 @@
 
 Drag a file anywhere in Windows, tap your configured hotkey (e.g. **Shift**), and drop. Turn files into the formats you need without breaking your flow. Everything happens 100% locally on your PC.
 
+![OG Converter home screen](Assets/public/og-home.png)
+
 > **Platform support:** this version runs on **Windows only** (Windows 10 1809+ / Windows 11).
 > A **Linux version is coming soon**: work starts in a few days. If you'd like to help build it, please reach out (see [Contributing](#-contributing)).
 
@@ -31,6 +33,29 @@ Drag a file anywhere in Windows, tap your configured hotkey (e.g. **Shift**), an
 - **Settings**: output folder, wheel size, sound feedback, overwrite behaviour, toasts, start with Windows.
 - **100% Offline & Private**: no uploads, no telemetry, no account.
 - **System Tray**: sits quietly in the notification area (≈75–80 MB private memory when idle).
+
+---
+
+## ⌨️ Shortcuts
+
+Start dragging a file in File Explorer, then tap a key while still holding the mouse button. The wheel opens at your cursor; drop on a slice to run it. Each key can be rebound on the Home screen.
+
+### `Shift`: Convert
+Change the file's format. For a PDF: Word, PNG, JPG, WebP, TIFF, or plain text.
+
+![Convert wheel (Shift) on a PDF](Assets/public/og-short-cut-convert.png)
+
+### `Ctrl`: Tools
+Edit or optimize the file. For a PDF: Compress, Split / Extract, Merge, Rotate, Cover Image, Remove Metadata, Protect.
+
+![Tools wheel (Ctrl) on a PDF](Assets/public/og-short-cut-tools.png)
+
+### `Alt`: Actions
+Quick file actions: Copy Path, Show in Explorer, Terminal, SHA-256, Duplicate, Zip, Base64, Protect.
+
+![Actions wheel (Alt) on a PDF](Assets/public/og-short-cut-actions.png)
+
+Press `Esc` at any time to close the wheel.
 
 ---
 
