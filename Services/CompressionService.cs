@@ -36,7 +36,7 @@ namespace OgConverter.Services
                 "ico" => null,
                 "jpg" or "jpeg" or "png" or "webp" or "bmp" or "tif" or "tiff" or "avif" => CompressionKind.Image,
                 "pdf" => CompressionKind.Pdf,
-                "docx" or "xlsx" or "pptx" or "docm" or "xlsm" or "pptm" or "odt" or "ods" or "odp" => CompressionKind.Office,
+                "docx" or "xlsx" or "pptx" or "ppsx" or "docm" or "xlsm" or "pptm" or "odt" or "ods" or "odp" => CompressionKind.Office,
                 "zip" or "tar" => CompressionKind.Archive,
                 "gz" or "tgz" or "7z" or "rar" or "bz2" or "xz" or "zst" or "br" => null,
                 _ => FormatRegistry.DetectCategory(path) switch

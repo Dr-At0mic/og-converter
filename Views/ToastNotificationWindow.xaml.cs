@@ -2,6 +2,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using OgConverter.Models;
 
@@ -34,11 +36,20 @@ namespace OgConverter.Views
             SetStatus("", "ModeToolsBrush", "AccentSubtleBrush");
             TitleText.Text = title;
             SubtitleText.Text = Path.GetFileName(sourcePath);
-            MetricsText.Text = "Starting…";
+            MetricsText.Text = "Working…";
             OpenFileBtn.Visibility = Visibility.Collapsed;
             ProgressTrack.Visibility = Visibility.Visible;
             ProgressScale.ScaleX = 0;
+            SetSweep(true);
             PlaceAndShow();
+        }
+
+        private void SetSweep(bool on)
+        {
+            ProgressSweep.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            SweepShift.BeginAnimation(TranslateTransform.XProperty, on
+                ? new DoubleAnimation(-1, 1, TimeSpan.FromSeconds(1.4)) { RepeatBehavior = RepeatBehavior.Forever }
+                : null);
         }
 
         /// <summary>0–1. Safe to call from any thread.</summary>
@@ -47,6 +58,7 @@ namespace OgConverter.Views
             Dispatcher.BeginInvoke(() =>
             {
                 if (!IsVisible) return;
+                if (ProgressSweep.Visibility == Visibility.Visible) SetSweep(false);
                 ProgressScale.ScaleX = Math.Clamp(fraction, 0, 1);
                 MetricsText.Text = $"{fraction * 100:0}%";
             });
@@ -63,6 +75,7 @@ namespace OgConverter.Views
         public void ShowJob(ConversionJob job)
         {
             _targetPath = job.TargetPath;
+            SetSweep(false);
             ProgressTrack.Visibility = Visibility.Collapsed;
 
             if (job.IsSuccess)

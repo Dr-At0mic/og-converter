@@ -45,13 +45,13 @@ namespace OgConverter.Services
 
         private static readonly HashSet<string> TextOutputs = new() { "docx", "doc", "odt", "rtf", "pdf", "txt", "html" };
         private static readonly HashSet<string> SheetOutputs = new() { "xlsx", "xls", "ods", "csv", "pdf" };
-        private static readonly HashSet<string> SlideOutputs = new() { "pptx", "ppt", "odp", "pdf" };
+        private static readonly HashSet<string> SlideOutputs = new() { "pptx", "ppt", "odp", "ppsx", "pdf" };
 
         public static DocumentKind? KindOf(string ext) => ext.ToLowerInvariant() switch
         {
             "docx" or "doc" or "odt" or "rtf" or "txt" or "html" or "htm" or "md" or "markdown" => DocumentKind.Text,
             "xlsx" or "xls" or "ods" or "csv" => DocumentKind.Spreadsheet,
-            "pptx" or "ppt" or "odp" => DocumentKind.Presentation,
+            "pptx" or "ppt" or "odp" or "ppsx" => DocumentKind.Presentation,
             _ => null
         };
 
@@ -607,6 +607,7 @@ namespace OgConverter.Services
                 "pptx" => 24,
                 "ppt" => 1,
                 "odp" => 35,
+                "ppsx" => 28,  // ppSaveAsOpenXMLShow
                 "pdf" => 32,
                 _ => throw new InvalidOperationException($"PowerPoint can't save .{dstExt} files.")
             };
@@ -625,6 +626,71 @@ namespace OgConverter.Services
 
                 pres = app.Presentations.Open(FileName: src + "::\u0001", ReadOnly: -1, Untitled: 0, WithWindow: 0);
                 pres.SaveAs(FileName: dst, FileFormat: format);
+            }
+            catch (COMException ex)
+            {
+                throw new InvalidOperationException(FriendlyOfficeError("PowerPoint", ex), ex);
+            }
+            finally
+            {
+                try { pres?.Close(); } catch { }
+                try
+                {
+                    if (app is not null && !wasRunning)
+                    {
+                        dynamic started = app;
+                        if ((int)started.Presentations.Count == 0) started.Quit();
+                    }
+                }
+                catch { }
+                Release(pres);
+                Release(app);
+            }
+        }
+
+        private static readonly TimeSpan VideoTimeout = TimeSpan.FromMinutes(30);
+
+        /// <summary>
+        /// Records the presentation as an MP4 with PowerPoint itself, so transitions, animations, rehearsed timings,
+        /// narration and embedded media are kept. Slides without timings show for <paramref name="secondsPerSlide"/>.
+        /// </summary>
+        public static async Task ExportPowerPointVideoAsync(string src, string dst, int secondsPerSlide = 5)
+        {
+            if (!HasPowerPoint) throw new InvalidOperationException("Recording a video with transitions needs Microsoft PowerPoint.");
+            await Gate.WaitAsync();
+            try
+            {
+                await RunStaAsync(() => CreateVideoWithPowerPoint(src, dst, secondsPerSlide), VideoTimeout);
+            }
+            finally
+            {
+                Gate.Release();
+            }
+            if (!File.Exists(dst)) throw new InvalidOperationException("PowerPoint finished but did not produce a video.");
+        }
+
+        private static void CreateVideoWithPowerPoint(string src, string dst, int secondsPerSlide)
+        {
+            bool wasRunning = Process.GetProcessesByName("POWERPNT").Length > 0;
+            dynamic? app = null;
+            dynamic? pres = null;
+            try
+            {
+                app = Activator.CreateInstance(Type.GetTypeFromProgID("PowerPoint.Application")!)!;
+                app.DisplayAlerts = 1;
+                app.AutomationSecurity = 3;
+                pres = app.Presentations.Open(FileName: src + "::\u0001", ReadOnly: -1, Untitled: 0, WithWindow: 0);
+
+                // Encoding runs in the background inside PowerPoint; poll PpMediaTaskStatus until it settles
+                pres.CreateVideo(FileName: dst, UseTimingsAndNarrations: true, DefaultSlideDuration: secondsPerSlide,
+                                 VertResolution: 1080, FramesPerSecond: 30, Quality: 85);
+                while (true)
+                {
+                    int status = (int)pres.CreateVideoStatus;
+                    if (status == 3) break;                                                         // done
+                    if (status == 4) throw new InvalidOperationException("PowerPoint couldn't record the video.");  // failed
+                    Thread.Sleep(500);
+                }
             }
             catch (COMException ex)
             {
@@ -666,8 +732,9 @@ namespace OgConverter.Services
         }
 
         /// <summary>Office COM objects must live on an STA thread. Runs the work on a fresh one with a timeout.</summary>
-        private static async Task RunStaAsync(Action work)
+        private static async Task RunStaAsync(Action work, TimeSpan? timeout = null)
         {
+            var limit = timeout ?? Timeout;
             var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _automationPid = 0;
             var thread = new Thread(() =>
@@ -695,12 +762,12 @@ namespace OgConverter.Services
             thread.SetApartmentState(ApartmentState.STA);
             thread.Start();
 
-            var finished = await Task.WhenAny(tcs.Task, Task.Delay(Timeout));
+            var finished = await Task.WhenAny(tcs.Task, Task.Delay(limit));
             if (finished != tcs.Task)
             {
                 // Don't leave a hidden, stuck Office process behind (only ever the one we started)
                 KillAutomationProcess();
-                throw new TimeoutException("The document took longer than 3 minutes to convert. Office may be waiting on a dialog (e.g. activation or a repair prompt).");
+                throw new TimeoutException($"The document took longer than {limit.TotalMinutes:0} minutes to convert. Office may be waiting on a dialog (e.g. activation or a repair prompt).");
             }
             _automationPid = 0;
             await tcs.Task;
@@ -735,6 +802,7 @@ namespace OgConverter.Services
                 "txt" => "txt:Text (encoded):UTF8",
                 "csv" => "csv:Text - txt - csv (StarCalc):44,34,76,1",
                 "html" => "html",
+                "ppsx" => "ppsx:Impress MS PowerPoint 2007 XML AutoPlay",
                 _ => dstExt
             };
 

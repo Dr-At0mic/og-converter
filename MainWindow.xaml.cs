@@ -201,20 +201,40 @@ namespace OgConverter
                 return;
             }
 
-            // Compression can take minutes (video): show live progress until the result replaces it
+            // Conversions and tools can take minutes (video): show live progress in Recent activity and a toast
+            // until the result replaces them. Actions are instant and skip this.
             ToastNotificationWindow? progressToast = null;
+            ConversionJob? running = null;
             IProgress<double>? progress = null;
-            if (option.Id == ConversionEngine.CompressToolId && _settingsService.Current.ShowToastOnComplete)
+            if (option.Mode != WheelMode.Actions)
             {
-                progressToast = _notifyService.ShowProgress("Compressing…", filePath);
-                if (progressToast != null) progress = new Progress<double>(progressToast.ReportProgress);
+                running = new ConversionJob { SourcePath = filePath, Option = option, TargetFormat = option.Title, IsRunning = true };
+                _history.Insert(0, running);
+                EmptyHistoryNotice.Visibility = Visibility.Collapsed;
+
+                if (_settingsService.Current.ShowToastOnComplete)
+                {
+                    string title = option.Id == ConversionEngine.CompressToolId ? "Compressing…"
+                                 : option.Mode == WheelMode.Convert ? $"Converting to {option.Title}…"
+                                 : $"{option.Title}…";
+                    progressToast = _notifyService.ShowProgress(title, filePath);
+                }
+
+                // Progress<T> captures this (UI) thread, so both updates land on the dispatcher
+                progress = new Progress<double>(f =>
+                {
+                    running.Progress = f;
+                    progressToast?.ReportProgress(f);
+                });
             }
 
             var job = await _engine.ExecuteAsync(filePath, option, _settingsService.Current, parameters, progress);
 
             Dispatcher.Invoke(() =>
             {
-                _history.Insert(0, job);
+                int index = running != null ? _history.IndexOf(running) : -1;
+                if (index >= 0) _history[index] = job;
+                else _history.Insert(0, job);
                 EmptyHistoryNotice.Visibility = Visibility.Collapsed;
 
                 if (_settingsService.Current.ShowToastOnComplete)
@@ -492,8 +512,12 @@ namespace OgConverter
 
         private void OnClearHistoryClick(object sender, RoutedEventArgs e)
         {
-            _history.Clear();
-            EmptyHistoryNotice.Visibility = Visibility.Visible;
+            // Jobs still running stay; their result replaces them when done
+            for (int i = _history.Count - 1; i >= 0; i--)
+            {
+                if (!_history[i].IsRunning) _history.RemoveAt(i);
+            }
+            EmptyHistoryNotice.Visibility = _history.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void OnOpenHistoryFileClick(object sender, RoutedEventArgs e)

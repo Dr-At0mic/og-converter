@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Windows.Media.Imaging;
 using OgConverter.Models;
+using PdfSharp.Drawing;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
 using PigDocument = UglyToad.PdfPig.PdfDocument;
@@ -234,6 +236,47 @@ namespace OgConverter.Services
             output.Save(targetPath);
         }
 
+        /// <summary>
+        /// Wraps an image in a single-page PDF sized to the image's physical size (96 dpi when the file has none).
+        /// Decoding goes through WIC so anything Windows can open works and EXIF rotation is applied.
+        /// Upright JPEGs are embedded byte-for-byte; everything else is embedded as lossless PNG (alpha kept).
+        /// </summary>
+        public static void ImageToPdf(string imagePath, string targetPath)
+        {
+            var image = ImageCodec.TryLoad(imagePath, applyOrientation: true, maxDimension: 0)
+                ?? throw new InvalidOperationException($"Windows can't decode {Path.GetFileName(imagePath)}.");
+
+            using var data = new MemoryStream();
+            string ext = Path.GetExtension(imagePath).ToLowerInvariant();
+            if (ext is ".jpg" or ".jpeg" && ImageCodec.ReadOrientation(image.Metadata) == 1)
+            {
+                using var fs = File.OpenRead(imagePath);
+                fs.CopyTo(data);
+            }
+            else
+            {
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(image.Bitmap));
+                encoder.Save(data);
+            }
+            data.Position = 0;
+
+            var bmp = image.Bitmap;
+            double dpiX = bmp.DpiX > 1 ? bmp.DpiX : 96, dpiY = bmp.DpiY > 1 ? bmp.DpiY : 96;
+            double width = bmp.PixelWidth * 72.0 / dpiX, height = bmp.PixelHeight * 72.0 / dpiY;
+
+            using var doc = new PdfDocument();
+            var page = doc.AddPage();
+            page.Width = XUnit.FromPoint(width);
+            page.Height = XUnit.FromPoint(height);
+            using (var xImage = XImage.FromStream(data))
+            using (var gfx = XGraphics.FromPdfPage(page))
+            {
+                gfx.DrawImage(xImage, 0, 0, width, height);
+            }
+            doc.Save(targetPath);
+        }
+
         /// <summary>Rotates every page clockwise by the given multiple of 90 degrees.</summary>
         public static void RotatePages(string pdfPath, string targetPath, int degrees)
         {
@@ -254,8 +297,8 @@ namespace OgConverter.Services
             doc.Save(targetPath);
         }
 
-        /// <summary>Extracts text in reading order, one block per page.</summary>
-        public static string ExtractText(string pdfPath)
+        /// <summary>Extracts text in reading order, one block per page (headed "Page n", or <paramref name="unit"/> n).</summary>
+        public static string ExtractText(string pdfPath, string unit = "Page")
         {
             var sb = new StringBuilder();
             using var doc = PigDocument.Open(pdfPath);
@@ -264,7 +307,7 @@ namespace OgConverter.Services
             {
                 if (doc.NumberOfPages > 1)
                 {
-                    sb.AppendLine($"----- Page {page.Number} -----");
+                    sb.AppendLine($"----- {unit} {page.Number} -----");
                 }
                 sb.AppendLine(ContentOrderTextExtractor.GetText(page).Trim());
                 sb.AppendLine();

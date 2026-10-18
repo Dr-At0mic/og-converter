@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 
 namespace OgConverter.Models
 {
@@ -151,9 +152,37 @@ namespace OgConverter.Models
         public ZipCipher ZipCipher { get; set; } = ZipCipher.Aes256;
     }
 
-    public class ConversionJob
+    public class ConversionJob : INotifyPropertyChanged
     {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+        /// <summary>Placeholder shown in Recent activity while the work runs; replaced by the finished job.</summary>
+        public bool IsRunning { get; init; }
+
+        private double _progress;
+        /// <summary>0–1 while running. Only meaningful once <see cref="HasProgress"/> is true.</summary>
+        public double Progress
+        {
+            get => _progress;
+            set
+            {
+                _progress = Math.Clamp(value, 0, 1);
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Progress)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ProgressText)));
+                if (!HasProgress)
+                {
+                    HasProgress = true;
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasProgress)));
+                }
+            }
+        }
+
+        /// <summary>False until the first report: the work can't be measured (yet), so show activity instead of a percentage.</summary>
+        public bool HasProgress { get; private set; }
+
+        public string ProgressText => HasProgress ? $"{Progress * 100:0}%" : "Working…";
         public ToolParameters? Parameters { get; set; }
         public string SourcePath { get; set; } = string.Empty;
         public string TargetPath { get; set; } = string.Empty;

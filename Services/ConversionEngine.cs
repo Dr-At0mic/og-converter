@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -96,7 +98,7 @@ namespace OgConverter.Services
                 switch (item.Mode)
                 {
                     case WheelMode.Convert:
-                        await HandleConversionAsync(job, settings);
+                        await HandleConversionAsync(job, settings, progress);
                         break;
                     case WheelMode.Tools:
                         await HandleToolAsync(job, settings, progress);
@@ -125,7 +127,7 @@ namespace OgConverter.Services
             return job;
         }
 
-        private async Task HandleConversionAsync(ConversionJob job, AppSettings settings)
+        private async Task HandleConversionAsync(ConversionJob job, AppSettings settings, IProgress<double>? progress)
         {
             // Google Drive shortcut: the content is online, so open it there
             if (job.Option.Id == "gdoc_open")
@@ -192,6 +194,29 @@ namespace OgConverter.Services
                 return;
             }
 
+            // Presentations → slide images, slide text, video (see PresentationService)
+            if (FormatRegistry.DetectCategory(job.SourcePath) == FileCategory.Presentation && ext is "png" or "jpg" or "txt" or "mp4")
+            {
+                switch (ext)
+                {
+                    case "mp4":
+                        await PresentationService.ToVideoAsync(job.SourcePath, targetPath, IsFFmpegAvailable ? _ffmpegPath : null, progress);
+                        break;
+                    case "txt":
+                        await PresentationService.WithPdfAsync(job.SourcePath, async pdf =>
+                        {
+                            await File.WriteAllTextAsync(targetPath, PdfToolsService.ExtractText(pdf, "Slide"));
+                            return true;
+                        });
+                        break;
+                    default:
+                        job.TargetPath = await PresentationService.WithPdfAsync(job.SourcePath, pdf => RenderPdfToImagesAsync(pdf, ext, settings, job.SourcePath, "slide"));
+                        break;
+                }
+                job.IsSuccess = true;
+                return;
+            }
+
             // Office documents, spreadsheets, presentations, Markdown, PDF → Word
             if (DocumentEngine.Handles(sourceExt, ext))
             {
@@ -222,11 +247,18 @@ namespace OgConverter.Services
                 return;
             }
 
+            // Image to PDF (FFmpeg has no PDF muxer; embed the image with PDFsharp)
+            if (ext == "pdf" && FormatRegistry.DetectCategory(job.SourcePath) == FileCategory.Image)
+            {
+                await ImageToPdfAsync(job.SourcePath, targetPath);
+                job.IsSuccess = true;
+                return;
+            }
+
             // FFmpeg conversions (Images, Audio, Video)
             if (IsFFmpegAvailable)
             {
-                string args = BuildFFmpegArgs(job.SourcePath, targetPath, ext, settings);
-                await RunProcessAsync(_ffmpegPath!, args);
+                await RunFFmpegAsync(job.SourcePath, BuildFFmpegArgs(job.SourcePath, targetPath, ext, settings), progress);
                 return;
             }
 
@@ -310,6 +342,14 @@ namespace OgConverter.Services
                 return;
             }
 
+            // Presentation tools
+            if (job.Option.Id.StartsWith("tool_slides_", StringComparison.Ordinal))
+            {
+                job.TargetPath = await HandleSlidesToolAsync(job, settings);
+                job.IsSuccess = true;
+                return;
+            }
+
             // FFmpeg Tools
             string targetPath = GetTargetFilePath(job.SourcePath, sourceExt, settings, $"_{job.Option.Id}");
             job.TargetPath = targetPath;
@@ -319,23 +359,59 @@ namespace OgConverter.Services
                 throw new InvalidOperationException("FFmpeg is required for advanced file tools.");
             }
 
-            string args = job.Option.Id switch
+            string[] options = job.Option.Id switch
             {
-                "tool_resize_50" => $"-y -i \"{job.SourcePath}\" -vf \"scale=iw*0.5:ih*0.5\" \"{targetPath}\"",
-                "tool_grayscale" => $"-y -i \"{job.SourcePath}\" -vf \"format=gray\" \"{targetPath}\"",
-                "tool_strip_meta" => $"-y -i \"{job.SourcePath}\" -map_metadata -1 -c copy \"{targetPath}\"",
+                "tool_resize_50" => new[] { "-vf", "scale=iw*0.5:ih*0.5" },
+                "tool_grayscale" => new[] { "-vf", "format=gray" },
+                "tool_strip_meta" => new[] { "-map_metadata", "-1", "-c", "copy" },
 
-                "tool_mute" => $"-y -i \"{job.SourcePath}\" -c:v copy -an \"{targetPath}\"",
-                "tool_720p" => $"-y -i \"{job.SourcePath}\" -vf \"scale=-2:720\" -c:v libx264 -crf 23 -c:a copy \"{targetPath}\"",
-                "tool_trim_10s" => $"-y -i \"{job.SourcePath}\" -t 10 -c copy \"{targetPath}\"",
+                "tool_mute" => new[] { "-c:v", "copy", "-an" },
+                "tool_720p" => new[] { "-vf", "scale=-2:720", "-c:v", "libx264", "-crf", "23", "-c:a", "copy" },
+                "tool_trim_10s" => new[] { "-t", "10", "-c", "copy" },
 
-                "tool_normalize" => $"-y -i \"{job.SourcePath}\" -af \"loudnorm\" \"{targetPath}\"",
-                "tool_mono" => $"-y -i \"{job.SourcePath}\" -ac 1 \"{targetPath}\"",
+                "tool_normalize" => new[] { "-af", "loudnorm" },
+                "tool_mono" => new[] { "-ac", "1" },
 
-                _ => $"-y -i \"{job.SourcePath}\" \"{targetPath}\""
+                _ => Array.Empty<string>()
             };
 
-            await RunProcessAsync(_ffmpegPath!, args);
+            // Trimming stops at 10 s, so the full duration would leave the bar short of 100%; it's a quick stream copy anyway
+            await RunFFmpegAsync(job.SourcePath, new[] { "-i", job.SourcePath }.Concat(options).Append(targetPath),
+                job.Option.Id == "tool_trim_10s" ? null : progress);
+        }
+
+        private static async Task<string> HandleSlidesToolAsync(ConversionJob job, AppSettings settings)
+        {
+            string src = job.SourcePath;
+            switch (job.Option.Id)
+            {
+                case "tool_slides_cover":
+                {
+                    string target = GetTargetFilePath(src, "png", settings, "_cover");
+                    await PresentationService.WithPdfAsync(src, async pdf => { await SaveFirstPageAsync(pdf, target); return true; });
+                    return target;
+                }
+                case "tool_slides_handout":
+                {
+                    string target = GetTargetFilePath(src, "pdf", settings, "_handout");
+                    await PresentationService.WithPdfAsync(src, pdf => Task.Run(() => { PresentationService.HandoutFromPdf(pdf, target); return true; }));
+                    return target;
+                }
+                case "tool_slides_notes":
+                {
+                    string target = GetTargetFilePath(src, "txt", settings, "_notes");
+                    await PresentationService.ExtractNotesAsync(src, target);
+                    return target;
+                }
+                case "tool_slides_media":
+                {
+                    string dir = GetUniquePath(Path.Combine(GetOutputDirectory(src, settings), Path.GetFileNameWithoutExtension(src) + "_media"), settings);
+                    await PresentationService.ExtractMediaAsync(src, dir);
+                    return dir;
+                }
+                default:
+                    throw new InvalidOperationException($"Unknown presentation tool: {job.Option.Id}");
+            }
         }
 
         private async Task HandlePdfToolAsync(ConversionJob job, AppSettings settings)
@@ -347,17 +423,7 @@ namespace OgConverter.Services
                 case "tool_pdf_cover":
                 {
                     string target = GetTargetFilePath(src, "png", settings, "_cover");
-                    string tempDir = Path.Combine(Path.GetTempPath(), "og-converter-pdf-" + Guid.NewGuid().ToString("N"));
-                    Directory.CreateDirectory(tempDir);
-                    try
-                    {
-                        var pages = await PdfRenderService.RenderPagesToPngAsync(src, (p, _) => Path.Combine(tempDir, $"page_{p:D3}.png"), maxPages: 1);
-                        File.Copy(pages[0], target, true);
-                    }
-                    finally
-                    {
-                        try { Directory.Delete(tempDir, true); } catch { }
-                    }
+                    await SaveFirstPageAsync(src, target);
                     job.TargetPath = target;
                     break;
                 }
@@ -587,7 +653,26 @@ namespace OgConverter.Services
         /// Renders a PDF to images. Single-page PDFs produce "name.ext"; multi-page PDFs produce
         /// "name_page_001.ext", "name_page_002.ext", ... Returns the first output path.
         /// </summary>
-        private async Task<string> RenderPdfToImagesAsync(string pdfPath, string targetExt, AppSettings settings)
+        /// <summary>Renders page 1 of the PDF to a PNG at <paramref name="target"/>.</summary>
+        private static async Task SaveFirstPageAsync(string pdfPath, string target)
+        {
+            string tempDir = Path.Combine(Path.GetTempPath(), "og-converter-pdf-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                var pages = await PdfRenderService.RenderPagesToPngAsync(pdfPath, (p, _) => Path.Combine(tempDir, $"page_{p:D3}.png"), maxPages: 1);
+                if (pages.Count == 0) throw new InvalidOperationException("There is no page to render.");
+                File.Copy(pages[0], target, true);
+            }
+            finally
+            {
+                try { Directory.Delete(tempDir, true); } catch { }
+            }
+        }
+
+        /// <param name="namingPath">File the outputs are named after (the original deck when <paramref name="pdfPath"/> is a temporary export).</param>
+        /// <param name="unit">Word used in the per-page suffix: "name_page_001.png", "name_slide_001.png".</param>
+        private async Task<string> RenderPdfToImagesAsync(string pdfPath, string targetExt, AppSettings settings, string? namingPath = null, string unit = "page")
         {
             string tempDir = Path.Combine(Path.GetTempPath(), "og-converter-pdf-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -602,8 +687,8 @@ namespace OgConverter.Services
                 string? first = null;
                 for (int i = 0; i < pngPages.Count; i++)
                 {
-                    string? suffix = pngPages.Count > 1 ? $"_page_{i + 1:D3}" : null;
-                    string target = GetTargetFilePath(pdfPath, targetExt, settings, suffix);
+                    string? suffix = pngPages.Count > 1 ? $"_{unit}_{i + 1:D3}" : null;
+                    string target = GetTargetFilePath(namingPath ?? pdfPath, targetExt, settings, suffix);
 
                     if (targetExt == "png")
                     {
@@ -615,7 +700,7 @@ namespace OgConverter.Services
                         {
                             throw new InvalidOperationException($"FFmpeg is required to save PDF pages as .{targetExt}.");
                         }
-                        await RunProcessAsync(_ffmpegPath!, BuildFFmpegArgs(pngPages[i], target, targetExt, settings));
+                        await RunFFmpegAsync(pngPages[i], BuildFFmpegArgs(pngPages[i], target, targetExt, settings), null);
                     }
 
                     first ??= target;
@@ -629,63 +714,70 @@ namespace OgConverter.Services
             }
         }
 
-        private static string BuildFFmpegArgs(string input, string output, string targetExt, AppSettings settings)
+        private static string[] BuildFFmpegArgs(string input, string output, string targetExt, AppSettings settings)
         {
-            // Video to GIF high quality palette
-            if (targetExt == "gif")
+            string[] codec = targetExt switch
             {
-                return $"-y -i \"{input}\" -vf \"fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" \"{output}\"";
+                // Video to GIF high quality palette
+                "gif" => new[] { "-vf", "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" },
+
+                "webp" => new[] { "-quality", settings.ImageQuality.ToString() },
+                "avif" => new[] { "-c:v", "libsvtav1", "-crf", "30" },
+
+                // Audio (also extracts the soundtrack of a video)
+                "mp3" => new[] { "-vn", "-c:a", "libmp3lame", "-b:a", "192k" },
+                "wav" => new[] { "-vn", "-c:a", "pcm_s16le" },
+                "aac" => new[] { "-vn", "-c:a", "aac", "-b:a", "192k" },
+                "wma" => new[] { "-vn", "-c:a", "wmav2", "-b:a", "192k" },
+
+                // Video
+                "mp4" => new[] { "-vcodec", "libx264", "-crf", settings.VideoCrf.ToString(), "-preset", "fast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k" },
+                // FFmpeg's VP9 defaults are single-threaded at the slowest speed (about 3x slower than real time for 1080p).
+                // Row multithreading + tiles + cpu-used 4 is ~6x faster at about the same size and quality.
+                "webm" => new[] { "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-deadline", "good", "-cpu-used", "4",
+                                  "-row-mt", "1", "-tile-columns", "2", "-threads", "0", "-c:a", "libopus", "-b:a", "128k" },
+                "avi" => new[] { "-c:v", "mpeg4", "-q:v", "4", "-c:a", "mp3" },
+                "wmv" => new[] { "-c:v", "wmv2", "-b:v", "2M", "-c:a", "wmav2", "-b:a", "192k" },
+
+                _ => Array.Empty<string>()
+            };
+
+            return new[] { "-i", input }.Concat(codec).Append(output).ToArray();
+        }
+
+        /// <summary>
+        /// Runs FFmpeg (overwrite is implied). With <paramref name="progress"/>, the input's duration is probed so
+        /// FFmpeg's position can be reported as 0–1; inputs without a duration (still images) report nothing.
+        /// </summary>
+        private async Task RunFFmpegAsync(string input, IEnumerable<string> args, IProgress<double>? progress)
+        {
+            double duration = 0;
+            if (progress != null)
+            {
+                try { duration = (await MediaToolkit.ProbeAsync(_ffmpegPath!, input)).DurationSeconds; } catch { }
+            }
+            await MediaToolkit.RunAsync(_ffmpegPath!, args, duration, progress);
+        }
+
+        /// <summary>Formats Windows can't decode (e.g. AVIF without the codec extension) go through a temporary PNG made by FFmpeg.</summary>
+        private async Task ImageToPdfAsync(string input, string output)
+        {
+            if (ImageCodec.TryLoad(input, applyOrientation: false, maxDimension: 0) != null || !IsFFmpegAvailable)
+            {
+                await Task.Run(() => PdfToolsService.ImageToPdf(input, output));
+                return;
             }
 
-            // Video to Audio extract (MP3)
-            if (targetExt == "mp3")
+            string tempPng = Path.Combine(Path.GetTempPath(), $"ogc_{Guid.NewGuid():N}.png");
+            try
             {
-                return $"-y -i \"{input}\" -vn -c:a libmp3lame -b:a 192k \"{output}\"";
+                await RunFFmpegAsync(input, new[] { "-i", input, "-frames:v", "1", tempPng }, null);
+                await Task.Run(() => PdfToolsService.ImageToPdf(tempPng, output));
             }
-
-            if (targetExt == "wav")
+            finally
             {
-                return $"-y -i \"{input}\" -vn -c:a pcm_s16le \"{output}\"";
+                try { File.Delete(tempPng); } catch { }
             }
-
-            if (targetExt == "aac")
-            {
-                return $"-y -i \"{input}\" -vn -c:a aac -b:a 192k \"{output}\"";
-            }
-
-            if (targetExt == "wma")
-            {
-                return $"-y -i \"{input}\" -vn -c:a wmav2 -b:a 192k \"{output}\"";
-            }
-
-            // Image conversions (WebP, AVIF, PNG, JPG)
-            if (targetExt == "webp")
-            {
-                return $"-y -i \"{input}\" -quality {settings.ImageQuality} \"{output}\"";
-            }
-
-            if (targetExt == "avif")
-            {
-                return $"-y -i \"{input}\" -c:v libsvtav1 -crf 30 \"{output}\"";
-            }
-
-            if (targetExt == "mp4")
-            {
-                return $"-y -i \"{input}\" -vcodec libx264 -crf {settings.VideoCrf} -preset fast -pix_fmt yuv420p -c:a aac -b:a 192k \"{output}\"";
-            }
-
-            if (targetExt == "avi")
-            {
-                return $"-y -i \"{input}\" -c:v mpeg4 -q:v 4 -c:a mp3 \"{output}\"";
-            }
-
-            if (targetExt == "wmv")
-            {
-                return $"-y -i \"{input}\" -c:v wmv2 -b:v 2M -c:a wmav2 -b:a 192k \"{output}\"";
-            }
-
-            // General FFmpeg command
-            return $"-y -i \"{input}\" \"{output}\"";
         }
 
         private static bool TryWpfImageConvert(string input, string output, string targetExt)
@@ -790,30 +882,6 @@ namespace OgConverter.Services
             return candidate;
         }
 
-        private static async Task RunProcessAsync(string exePath, string args)
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = exePath,
-                Arguments = "-nostdin " + args,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardOutput = false,
-                RedirectStandardInput = false
-            };
-
-            using var process = new Process { StartInfo = psi };
-            process.Start();
-
-            string stderr = await process.StandardError.ReadToEndAsync().ConfigureAwait(false);
-            await process.WaitForExitAsync().ConfigureAwait(false);
-
-            if (process.ExitCode != 0)
-            {
-                throw new InvalidOperationException($"Conversion process failed (exit code {process.ExitCode}): {stderr}");
-            }
-        }
 
         /// <summary>
         /// Runs clipboard work on an STA thread. Uses a short-lived thread rather than the UI dispatcher,

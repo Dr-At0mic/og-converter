@@ -321,6 +321,35 @@
                                                     </StackPanel>
                                                     <TextBlock x:Name="error" Text="{Binding ErrorMessage}" FontSize="11.5" Foreground="{StaticResource DangerBrush}"
                                                                TextWrapping="Wrap" Margin="0,3,0,0" Visibility="Collapsed" MaxHeight="48" />
+                                                    <!-- Running: percentage bar, or a sweep while the work can't be measured -->
+                                                    <Grid x:Name="progressPanel" Margin="0,6,0,0" Visibility="Collapsed">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="44" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Grid Height="3" VerticalAlignment="Center" ClipToBounds="True">
+                                                            <Border Background="{StaticResource BorderStrongBrush}" CornerRadius="1.5" />
+                                                            <Border x:Name="progressFill" Background="{StaticResource AccentBrush}" CornerRadius="1.5" RenderTransformOrigin="0,0.5">
+                                                                <Border.RenderTransform>
+                                                                    <ScaleTransform ScaleX="{Binding Progress}" />
+                                                                </Border.RenderTransform>
+                                                            </Border>
+                                                            <Border x:Name="progressSweep" CornerRadius="1.5" Visibility="Collapsed">
+                                                                <Border.Background>
+                                                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                                        <LinearGradientBrush.RelativeTransform>
+                                                                            <TranslateTransform X="-1" />
+                                                                        </LinearGradientBrush.RelativeTransform>
+                                                                        <GradientStop Color="Transparent" Offset="0.2" />
+                                                                        <GradientStop Color="{StaticResource AccentColor}" Offset="0.5" />
+                                                                        <GradientStop Color="Transparent" Offset="0.8" />
+                                                                    </LinearGradientBrush>
+                                                                </Border.Background>
+                                                            </Border>
+                                                        </Grid>
+                                                        <TextBlock Grid.Column="1" Text="{Binding ProgressText}" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"
+                                                                   HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                    </Grid>
                                                 </StackPanel>
 
                                                 <StackPanel x:Name="rowActions" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.55">
@@ -338,6 +367,36 @@
                                                 <Setter TargetName="detail" Property="Visibility" Value="Collapsed" />
                                                 <Setter TargetName="rowActions" Property="Visibility" Value="Collapsed" />
                                             </DataTrigger>
+                                            <!-- After the IsSuccess trigger so it wins while the job is still running -->
+                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                <Setter TargetName="statusBg" Property="Background" Value="{StaticResource AccentSubtleBrush}" />
+                                                <Setter TargetName="statusIcon" Property="Text" Value="&#xE895;" />
+                                                <Setter TargetName="statusIcon" Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                <Setter TargetName="error" Property="Visibility" Value="Collapsed" />
+                                                <Setter TargetName="detail" Property="Visibility" Value="Collapsed" />
+                                                <Setter TargetName="rowActions" Property="Visibility" Value="Collapsed" />
+                                                <Setter TargetName="progressPanel" Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                            <MultiDataTrigger>
+                                                <MultiDataTrigger.Conditions>
+                                                    <Condition Binding="{Binding IsRunning}" Value="True" />
+                                                    <Condition Binding="{Binding HasProgress}" Value="False" />
+                                                </MultiDataTrigger.Conditions>
+                                                <Setter TargetName="progressFill" Property="Visibility" Value="Collapsed" />
+                                                <Setter TargetName="progressSweep" Property="Visibility" Value="Visible" />
+                                                <MultiDataTrigger.EnterActions>
+                                                    <BeginStoryboard x:Name="sweep">
+                                                        <Storyboard RepeatBehavior="Forever">
+                                                            <DoubleAnimation Storyboard.TargetName="progressSweep"
+                                                                             Storyboard.TargetProperty="(Border.Background).(Brush.RelativeTransform).(TranslateTransform.X)"
+                                                                             From="-1" To="1" Duration="0:0:1.4" />
+                                                        </Storyboard>
+                                                    </BeginStoryboard>
+                                                </MultiDataTrigger.EnterActions>
+                                                <MultiDataTrigger.ExitActions>
+                                                    <StopStoryboard BeginStoryboardName="sweep" />
+                                                </MultiDataTrigger.ExitActions>
+                                            </MultiDataTrigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="row" Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
                                                 <Setter TargetName="rowActions" Property="Opacity" Value="1" />

@@ -105,10 +105,45 @@ namespace OgConverter.Tests
             if (DocumentEngine.HasPowerPoint)
             {
                 string pptx = Path.Combine(tempDir, "deck.pptx");
-                CreatePresentation(pptx);
+                string picture = Path.Combine(tempDir, "deck_picture.png");
+                VerificationRunner.CreateDummyImage(picture);
+                CreatePresentation(pptx, picture);
                 string odp = await ConvertTo(engine, settings, pptx, "odp");
                 await ConvertTo(engine, settings, odp, "pdf");
-                await ConvertTo(engine, settings, pptx, "ppt");
+                string ppt = await ConvertTo(engine, settings, pptx, "ppt");
+
+                // Extra outputs and tools
+                await ConvertTo(engine, settings, pptx, "ppsx");
+                string firstSlide = await ConvertTo(engine, settings, pptx, "png");
+                if (!firstSlide.EndsWith("_slide_001.png")) throw new Exception($"Slide images should be numbered per slide, got {firstSlide}");
+                await ConvertTo(engine, settings, ppt, "jpg");
+                await ConvertTo(engine, settings, pptx, "txt", mustContain: "OG Converter test deck");
+                string video = await ConvertTo(engine, settings, pptx, "mp4");
+                if (engine.FFmpegPath != null)
+                {
+                    double seconds = (await MediaToolkit.ProbeAsync(engine.FFmpegPath, video)).DurationSeconds;
+                    Console.WriteLine($"     deck video length {seconds:0.0}s");
+                    if (seconds < 2 * PresentationService.SecondsPerSlide - 1) throw new Exception($"Deck video is too short ({seconds:0.0}s)");
+                }
+                await RunTool(engine, settings, pptx, "tool_slides_cover");
+                string handout = await RunTool(engine, settings, pptx, "tool_slides_handout");
+                if (PdfToolsService.GetPageCount(handout) != 1) throw new Exception("Two slides should fit on one handout page.");
+                string notes = await RunTool(engine, settings, pptx, "tool_slides_notes");
+                if (!(await File.ReadAllTextAsync(notes)).Contains("Remember the demo")) throw new Exception("Speaker notes are missing.");
+                await RunTool(engine, settings, odp, "tool_slides_notes");
+                string media = await RunTool(engine, settings, pptx, "tool_slides_media");
+                if (Directory.GetFiles(media).Length == 0) throw new Exception("No media extracted.");
+
+                // Slideshow fallback used when PowerPoint isn't installed
+                if (engine.FFmpegPath != null)
+                {
+                    string deckPdf = await ConvertTo(engine, settings, pptx, "pdf");
+                    string slideshow = Path.Combine(tempDir, "deck_slideshow.mp4");
+                    double last = 0;
+                    await PresentationService.SlideshowFromPdfAsync(deckPdf, slideshow, engine.FFmpegPath, new SyncProgress(f => last = f));
+                    Console.WriteLine($"     PDF   → slideshow MP4 Success={File.Exists(slideshow)} progress reached {last:P0}");
+                    if (!File.Exists(slideshow) || last < 0.9) throw new Exception("Slideshow video failed or reported no progress.");
+                }
             }
 
             // Wheels show document formats
@@ -131,6 +166,25 @@ namespace OgConverter.Tests
                 if (!text.Contains(mustContain)) throw new Exception($"{ext} output is missing \"{mustContain}\"");
             }
             return job.TargetPath;
+        }
+
+        private static async Task<string> RunTool(ConversionEngine engine, AppSettings settings, string src, string toolId)
+        {
+            var item = FormatRegistry.GetWheelItems(src, WheelMode.Tools).Find(x => x.Id == toolId)
+                       ?? throw new Exception($"{toolId} is missing from the {Path.GetExtension(src)} tools wheel");
+            var started = DateTime.Now;
+            var job = await engine.ExecuteAsync(src, item, settings);
+            Console.WriteLine($"     {Path.GetExtension(src).TrimStart('.').ToUpperInvariant(),-5} {item.Title,-14} Success={job.IsSuccess} {(DateTime.Now - started).TotalSeconds,5:0.0}s  {Path.GetFileName(job.TargetPath)} {job.ErrorMessage}");
+            if (!job.IsSuccess) throw new Exception($"{src} {toolId} failed: {job.ErrorMessage}");
+            return job.TargetPath;
+        }
+
+        /// <summary>Progress&lt;T&gt; posts to a sync context; this reports inline so the value is current when the await returns.</summary>
+        internal sealed class SyncProgress : IProgress<double>
+        {
+            private readonly Action<double> _report;
+            public SyncProgress(Action<double> report) => _report = report;
+            public void Report(double value) => _report(value);
         }
 
         /// <summary>White text over a full-page picture placed behind the text in the header (like the user's document).</summary>
@@ -168,7 +222,7 @@ namespace OgConverter.Tests
         }
 
         /// <summary>Creates a two-slide deck with PowerPoint so the presentation path can be tested.</summary>
-        private static void CreatePresentation(string path)
+        private static void CreatePresentation(string path, string picture)
         {
             Exception? error = null;
             var thread = new Thread(() =>
@@ -181,7 +235,9 @@ namespace OgConverter.Tests
                     dynamic pres = app.Presentations.Add(0); // msoFalse: no window
                     dynamic slide = pres.Slides.Add(1, 1);   // ppLayoutTitle
                     slide.Shapes[1].TextFrame.TextRange.Text = "OG Converter test deck";
-                    pres.Slides.Add(2, 2);                   // ppLayoutText
+                    slide.NotesPage.Shapes.Placeholders[2].TextFrame.TextRange.Text = "Remember the demo";
+                    dynamic second = pres.Slides.Add(2, 2);  // ppLayoutText
+                    second.Shapes.AddPicture(picture, 0, -1, 100, 100);
                     pres.SaveAs(path, 24);
                     pres.Close();
                 }

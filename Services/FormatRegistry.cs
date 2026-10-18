@@ -23,7 +23,7 @@ namespace OgConverter.Services
                 ".mp3" or ".wav" or ".flac" or ".m4a" or ".aac" or ".ogg" or ".opus" or ".wma" or ".aiff" => FileCategory.Audio,
                 ".pdf" or ".docx" or ".doc" or ".odt" or ".rtf" or ".txt" or ".md" or ".markdown" or ".html" or ".htm" or ".json" => FileCategory.Document,
                 ".xlsx" or ".xls" or ".ods" or ".csv" => FileCategory.Spreadsheet,
-                ".pptx" or ".ppt" or ".odp" => FileCategory.Presentation,
+                ".pptx" or ".ppt" or ".odp" or ".ppsx" => FileCategory.Presentation,
                 ".zip" or ".tar" or ".gz" or ".rar" or ".7z" or ".bz2" => FileCategory.Archive,
                 _ => FileCategory.Other
             };
@@ -178,6 +178,13 @@ namespace OgConverter.Services
                     AddIfDifferent(list, "PPTX", "PowerPoint presentation", "pptx", SlideGlyph);
                     AddIfDifferent(list, "ODP", "OpenDocument Presentation (LibreOffice, Google Slides)", "odp", SlideGlyph);
                     AddIfDifferent(list, "PPT", "PowerPoint 97\u20132003 presentation", "ppt", SlideGlyph);
+                    AddIfDifferent(list, "PPSX", "Slideshow that opens straight into presenting", "ppsx", SlideGlyph);
+                    AddIfDifferent(list, "PNG", "Every slide as a PNG image", "png", "\ue91b");
+                    AddIfDifferent(list, "JPG", "Every slide as a JPG image", "jpg", "\ue91b");
+                    AddIfDifferent(list, "MP4", DocumentEngine.HasPowerPoint
+                        ? "Video with transitions and animations (PowerPoint)"
+                        : $"Slideshow video, {PresentationService.SecondsPerSlide} s per slide", "mp4", "\ue714");
+                    AddIfDifferent(list, "TXT", "All slide text, slide by slide", "txt", "\ue8d2");
                     break;
 
                 case FileCategory.Archive:
@@ -257,9 +264,18 @@ namespace OgConverter.Services
                         : new WheelItem { Id = "tool_pdf_protect", Title = "Protect", Description = "Add a password (AES-256 encryption)", IconGlyph = "\uE72E", Mode = WheelMode.Tools });
                     break;
 
+                case FileCategory.Presentation:
+                    AddCompress(list, filePath);
+                    list.Add(new WheelItem { Id = "tool_slides_cover", Title = "Cover Image", Description = "Save the first slide as a PNG thumbnail", IconGlyph = "", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_slides_handout", Title = "Handouts", Description = "PDF with 6 slides per A4 page, for printing", IconGlyph = "", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_slides_notes", Title = "Speaker Notes", Description = "Export every slide's notes to a text file", IconGlyph = "", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_slides_media", Title = "Extract Media", Description = "Save embedded pictures, audio and video to a folder", IconGlyph = "", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_sha256", Title = "SHA-256", Description = "Compute cryptographic checksum", IconGlyph = "", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_duplicate", Title = "Duplicate", Description = "Create instant duplicate copy", IconGlyph = "", Mode = WheelMode.Tools });
+                    break;
+
                 case FileCategory.Document:
                 case FileCategory.Spreadsheet:
-                case FileCategory.Presentation:
                     AddCompress(list, filePath);
                     list.Add(new WheelItem { Id = "tool_b64", Title = "Base64", Description = "Encode file to Base64 string", IconGlyph = "\uE943", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_sha256", Title = "SHA-256", Description = "Compute cryptographic checksum", IconGlyph = "\uE8D7", Mode = WheelMode.Tools });

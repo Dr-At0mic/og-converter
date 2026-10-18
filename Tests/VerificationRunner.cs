@@ -54,6 +54,34 @@ namespace OgConverter.Tests
                     Console.WriteLine($"[6] Conversion to JPG: Success={jobJpg.IsSuccess}, Target={jobJpg.TargetPath}, Converted Size={jobJpg.ConvertedSizeBytes} bytes");
                 }
 
+                // 4b. Image to PDF (native, not FFmpeg)
+                var imagePdfItem = convertItems.Find(x => x.Extension == "pdf");
+                if (imagePdfItem != null)
+                {
+                    var jobPdf = await engine.ExecuteAsync(testPng, imagePdfItem, settings);
+                    Console.WriteLine($"[6b] Conversion to PDF: Success={jobPdf.IsSuccess}, Target={jobPdf.TargetPath}, Converted Size={jobPdf.ConvertedSizeBytes} bytes");
+                    if (!jobPdf.IsSuccess || PdfToolsService.GetPageCount(jobPdf.TargetPath) != 1)
+                    {
+                        throw new Exception($"Image to PDF test failed: {jobPdf.ErrorMessage}");
+                    }
+                }
+
+                // 4c. Video to WEBM: tuned VP9 speed, with progress
+                if (engine.FFmpegPath != null)
+                {
+                    string clip = Path.Combine(tempDir, "progress_clip.mp4");
+                    await MediaToolkit.RunAsync(engine.FFmpegPath, new[] { "-f", "lavfi", "-i", "testsrc2=size=1920x1080:rate=30", "-t", "4", "-c:v", "libx264", "-preset", "ultrafast", clip });
+                    var webmItem = FormatRegistry.GetWheelItems(clip, WheelMode.Convert).Find(x => x.Extension == "webm");
+                    if (webmItem != null)
+                    {
+                        double last = 0;
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        var jobWebm = await engine.ExecuteAsync(clip, webmItem, settings, null, new DocumentVerification.SyncProgress(f => last = f));
+                        Console.WriteLine($"[6c] Video to WEBM: Success={jobWebm.IsSuccess}, {sw.Elapsed.TotalSeconds:0.0}s, {jobWebm.ConvertedSizeBytes / 1024} KB, progress reached {last:P0} {jobWebm.ErrorMessage}");
+                        if (!jobWebm.IsSuccess || last < 0.9) throw new Exception($"Video to WEBM failed or reported no progress: {jobWebm.ErrorMessage}");
+                    }
+                }
+
                 // 5. Test Tools (Compress)
                 var toolItems = FormatRegistry.GetWheelItems(testPng, WheelMode.Tools);
                 if (toolItems.Count > 0)

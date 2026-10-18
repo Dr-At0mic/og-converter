@@ -34,8 +34,21 @@
                 <TextBlock x:Name="SubtitleText" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
                 <TextBlock x:Name="MetricsText" FontSize="11.5" Foreground="{StaticResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
                 <!-- Progress (long-running jobs only) -->
-                <Grid x:Name="ProgressTrack" Height="3" Margin="0,7,0,0" Visibility="Collapsed">
+                <Grid x:Name="ProgressTrack" Height="3" Margin="0,7,0,0" Visibility="Collapsed" ClipToBounds="True">
                     <Border Background="{StaticResource BorderStrongBrush}" CornerRadius="1.5" />
+                    <!-- Sweep until the first percentage arrives (some work can't be measured) -->
+                    <Border x:Name="ProgressSweep" CornerRadius="1.5" Visibility="Collapsed">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                <LinearGradientBrush.RelativeTransform>
+                                    <TranslateTransform x:Name="SweepShift" X="-1" />
+                                </LinearGradientBrush.RelativeTransform>
+                                <GradientStop Color="Transparent" Offset="0.2" />
+                                <GradientStop Color="{StaticResource AccentColor}" Offset="0.5" />
+                                <GradientStop Color="Transparent" Offset="0.8" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                    </Border>
                     <Border x:Name="ProgressFill" Background="{StaticResource ModeToolsBrush}" CornerRadius="1.5" RenderTransformOrigin="0,0.5">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="ProgressScale" ScaleX="0" />
