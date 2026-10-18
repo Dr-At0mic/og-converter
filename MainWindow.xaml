@@ -1,0 +1,677 @@
+<Window x:Class="OgConverter.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OgConverter.Controls"
+        Title="OG Converter"
+        Icon="pack://application:,,,/Assets/og-converter.ico"
+        Width="1080" Height="720"
+        MinWidth="900" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource WindowBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13"
+        TextOptions.TextFormattingMode="Display">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <!-- One row in a settings group: icon, title + description, control on the right -->
+        <Style x:Key="SettingRow" TargetType="Grid">
+            <Setter Property="Margin" Value="18,14" />
+            <Setter Property="MinHeight" Value="36" />
+        </Style>
+        <Style x:Key="RowDivider" TargetType="Border">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="{StaticResource DividerBrush}" />
+        </Style>
+        <Style x:Key="FormatChip" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="Margin" Value="3" />
+        </Style>
+        <Style x:Key="KeyCap" TargetType="Border">
+            <Setter Property="BorderBrush" Value="{StaticResource BorderStrongBrush}" />
+            <Setter Property="BorderThickness" Value="1,1,1,2" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="{StaticResource WindowBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="44" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- ============================ Title bar ============================ -->
+        <Border Grid.Row="0" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Brand -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                    <Border Width="22" Height="22" CornerRadius="6" Margin="0,0,10,0">
+                        <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#FF8A55" Offset="0" />
+                                <GradientStop Color="#F2541B" Offset="1" />
+                            </LinearGradientBrush>
+                        </Border.Background>
+                        <TextBlock Text="OG" Foreground="White" FontWeight="Bold" FontSize="9.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="OG Converter" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                </StackPanel>
+
+                <!-- Navigation -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <RadioButton x:Name="TabOverview" Style="{StaticResource NavTab}" Content="Home" Tag="&#xE80F;" IsChecked="True"
+                                 Checked="OnTabNavChanged" WindowChrome.IsHitTestVisibleInChrome="True" />
+                    <RadioButton x:Name="TabSettings" Style="{StaticResource NavTab}" Content="Settings" Tag="&#xE713;"
+                                 Checked="OnTabNavChanged" WindowChrome.IsHitTestVisibleInChrome="True" />
+                    <RadioButton x:Name="TabAbout" Style="{StaticResource NavTab}" Content="About" Tag="&#xE946;"
+                                 Checked="OnTabNavChanged" WindowChrome.IsHitTestVisibleInChrome="True" />
+                </StackPanel>
+
+                <!-- Utilities + window controls -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                    <Button Style="{StaticResource IconButton}" Content="&#xE768;" Click="OnTestWheelClick" ToolTip="Preview the wheel"
+                            WindowChrome.IsHitTestVisibleInChrome="True" Margin="0,7,2,0" />
+                    <Button Style="{StaticResource IconButton}" Content="&#xE8A0;" Click="OnMinimizeToTrayClick" ToolTip="Hide to system tray (keeps running)"
+                            WindowChrome.IsHitTestVisibleInChrome="True" Margin="0,7,10,0" />
+                    <Border Width="1" Height="18" Background="{StaticResource BorderBrush}" VerticalAlignment="Top" Margin="0,13,4,0" />
+                    <Button Style="{StaticResource CaptionButton}" Content="&#xE921;" Click="OnMinimizeWindowClick" ToolTip="Minimize"
+                            WindowChrome.IsHitTestVisibleInChrome="True" />
+                    <Button x:Name="MaximizeBtn" Style="{StaticResource CaptionButton}" Content="&#xE922;" Click="OnMaximizeWindowClick" ToolTip="Maximize"
+                            WindowChrome.IsHitTestVisibleInChrome="True" />
+                    <Button Style="{StaticResource CaptionCloseButton}" Content="&#xE8BB;" Click="OnCloseWindowClick" ToolTip="Close"
+                            WindowChrome.IsHitTestVisibleInChrome="True" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============================ Content ============================ -->
+        <Grid Grid.Row="1">
+
+            <!-- ======================= HOME ======================= -->
+            <Grid x:Name="ViewOverview" Margin="28,24,28,28" Visibility="Visible">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- Page header -->
+                <Grid Grid.Row="0" Margin="0,0,0,18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Home" Style="{StaticResource H1}" />
+                        <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0"
+                                   Text="Start dragging any file in Explorer, then tap a shortcut key to open the wheel." />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+                        <Border x:Name="KeyMappingNotice" Visibility="Collapsed" Background="{StaticResource WarningSubtleBrush}"
+                                CornerRadius="12" Padding="10,4" Margin="0,0,8,0" MaxWidth="380">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE7BA;" Style="{StaticResource Icon}" FontSize="12" Foreground="{StaticResource WarningBrush}" Margin="0,0,6,0" />
+                                <TextBlock x:Name="KeyMappingNoticeText" Foreground="{StaticResource WarningBrush}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{StaticResource SuccessSubtleBrush}" CornerRadius="12" Padding="10,4">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="7" Height="7" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,7,0" />
+                                <TextBlock Text="Listening for shortcuts" Foreground="{StaticResource SuccessBrush}" FontSize="11.5" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Shortcut cards -->
+                <Grid Grid.Row="1" Margin="0,0,0,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="12" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="16,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="36" Height="36" CornerRadius="8" Background="#1FFF6B35" Margin="0,0,12,0">
+                                <TextBlock Text="&#xE8AB;" Style="{StaticResource Icon}" Foreground="{StaticResource ModeConvertBrush}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Convert" FontWeight="SemiBold" />
+                                <TextBlock Text="Change file format" Style="{StaticResource Caption}" FontSize="11.5" Margin="0,1,0,0" />
+                            </StackPanel>
+                            <ComboBox x:Name="ConvertKeyCombo" Grid.Column="2" Width="96" VerticalAlignment="Center" SelectionChanged="OnKeyMappingChanged" ToolTip="Key that opens the Convert wheel">
+                                <ComboBoxItem Content="Shift" IsSelected="True" />
+                                <ComboBoxItem Content="Control" />
+                                <ComboBoxItem Content="Alt" />
+                                <ComboBoxItem Content="Win" />
+                                <ComboBoxItem Content="Space" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2" Style="{StaticResource Card}" Padding="16,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="36" Height="36" CornerRadius="8" Background="#1F3B9EFF" Margin="0,0,12,0">
+                                <TextBlock Text="&#xE90F;" Style="{StaticResource Icon}" Foreground="{StaticResource ModeToolsBrush}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Tools" FontWeight="SemiBold" />
+                                <TextBlock Text="Compress, split, edit" Style="{StaticResource Caption}" FontSize="11.5" Margin="0,1,0,0" />
+                            </StackPanel>
+                            <ComboBox x:Name="ToolsKeyCombo" Grid.Column="2" Width="96" VerticalAlignment="Center" SelectionChanged="OnKeyMappingChanged" ToolTip="Key that opens the Tools wheel">
+                                <ComboBoxItem Content="Control" IsSelected="True" />
+                                <ComboBoxItem Content="Shift" />
+                                <ComboBoxItem Content="Alt" />
+                                <ComboBoxItem Content="Win" />
+                                <ComboBoxItem Content="Space" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="4" Style="{StaticResource Card}" Padding="16,14">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="36" Height="36" CornerRadius="8" Background="#1FA78BFA" Margin="0,0,12,0">
+                                <TextBlock Text="&#xE945;" Style="{StaticResource Icon}" Foreground="{StaticResource ModeActionsBrush}" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Actions" FontWeight="SemiBold" />
+                                <TextBlock Text="Path, terminal, hash" Style="{StaticResource Caption}" FontSize="11.5" Margin="0,1,0,0" />
+                            </StackPanel>
+                            <ComboBox x:Name="ActionsKeyCombo" Grid.Column="2" Width="96" VerticalAlignment="Center" SelectionChanged="OnKeyMappingChanged" ToolTip="Key that opens the Actions wheel">
+                                <ComboBoxItem Content="Alt" IsSelected="True" />
+                                <ComboBoxItem Content="Control" />
+                                <ComboBoxItem Content="Shift" />
+                                <ComboBoxItem Content="Win" />
+                                <ComboBoxItem Content="Space" />
+                            </ComboBox>
+                        </Grid>
+                    </Border>
+                </Grid>
+
+                <!-- Studio + activity -->
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.25*" />
+                        <ColumnDefinition Width="16" />
+                        <ColumnDefinition Width="*" MinWidth="300" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Try it -->
+                    <Border Grid.Column="0" Style="{StaticResource Card}" AllowDrop="True"
+                            DragEnter="OnPlaygroundDragEnter" DragOver="OnPlaygroundDragOver"
+                            DragLeave="OnPlaygroundDragLeave" Drop="OnPlaygroundDrop">
+                        <Grid Margin="20,18,20,20">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                                <TextBlock Text="Try it here" Style="{StaticResource H2}" />
+                                <TextBlock Text="Drop a file to preview its wheel and run a conversion." Style="{StaticResource Caption}" Margin="0,3,0,0" />
+                            </StackPanel>
+
+                            <!-- Empty: dashed drop zone -->
+                            <Grid x:Name="PlaygroundPrompt" Grid.Row="1">
+                                <Rectangle RadiusX="8" RadiusY="8" Stroke="{StaticResource BorderStrongBrush}" StrokeThickness="1.2"
+                                           StrokeDashArray="5 4" Fill="#08FFFFFF" />
+                                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="16">
+                                    <Border Width="52" Height="52" CornerRadius="26" Background="{StaticResource SurfaceRaisedBrush}" HorizontalAlignment="Center">
+                                        <TextBlock Text="&#xE898;" Style="{StaticResource Icon}" FontSize="22" Foreground="{StaticResource AccentBrush}" />
+                                    </Border>
+                                    <TextBlock Text="Drop a file here" FontWeight="SemiBold" FontSize="14" HorizontalAlignment="Center" Margin="0,14,0,4" />
+                                    <TextBlock Text="Images, video, audio, PDF and archives" Style="{StaticResource Caption}" HorizontalAlignment="Center" />
+                                    <Button Style="{StaticResource AccentButton}" Click="OnChooseFileClick" HorizontalAlignment="Center" Margin="0,16,0,0" Padding="16,7">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="&#xE8E5;" FontFamily="{StaticResource IconFont}" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                            <TextBlock Text="Browse files" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Loaded: interactive wheel -->
+                            <Grid x:Name="PlaygroundWheelContainer" Grid.Row="1" Visibility="Collapsed">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <!-- Preview always fills the panel; the Size setting only affects the on-screen overlay -->
+                                <Viewbox Grid.Row="0" Stretch="Uniform">
+                                    <controls:RadialWheelCanvas x:Name="PlaygroundWheel" Width="460" Height="460" />
+                                </Viewbox>
+                                <Grid Grid.Row="1" Margin="0,10,0,0">
+                                    <TextBlock x:Name="PlaygroundInstructions" Style="{StaticResource Caption}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,0,90,0" />
+                                    <Button Content="Close" Click="OnCancelPlaygroundWheel" HorizontalAlignment="Right" Padding="12,5" />
+                                </Grid>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
+                    <!-- Recent activity -->
+                    <Border Grid.Column="2" Style="{StaticResource Card}">
+                        <Grid Margin="0,18,0,8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="20,0,14,10">
+                                <TextBlock Text="Recent activity" Style="{StaticResource H2}" VerticalAlignment="Center" />
+                                <Button Style="{StaticResource GhostButton}" Content="Clear" Click="OnClearHistoryClick" HorizontalAlignment="Right" FontSize="12" />
+                            </Grid>
+
+                            <ListBox x:Name="HistoryList" Grid.Row="1" Background="Transparent" Foreground="{StaticResource TextPrimaryBrush}" BorderThickness="0" Padding="8,0"
+                                     ItemContainerStyle="{StaticResource PlainListItem}"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border x:Name="row" CornerRadius="8" Padding="12,10" Margin="0,0,0,2" Background="Transparent">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border x:Name="statusBg" Width="30" Height="30" CornerRadius="15" Background="{StaticResource SuccessSubtleBrush}" VerticalAlignment="Top" Margin="0,1,12,0">
+                                                    <TextBlock x:Name="statusIcon" Text="&#xE73E;" Style="{StaticResource Icon}" FontSize="12" Foreground="{StaticResource SuccessBrush}" />
+                                                </Border>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding SourceFileName}" FontWeight="SemiBold" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                        <Border Background="{StaticResource SurfaceRaisedBrush}" CornerRadius="3" Padding="5,0" Margin="0,0,6,0">
+                                                            <TextBlock Text="{Binding TargetFormat}" FontSize="10.5" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" />
+                                                        </Border>
+                                                        <TextBlock x:Name="detail" Text="{Binding SizeComparisonText}" FontSize="11.5" Foreground="{StaticResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                    <TextBlock x:Name="error" Text="{Binding ErrorMessage}" FontSize="11.5" Foreground="{StaticResource DangerBrush}"
+                                                               TextWrapping="Wrap" Margin="0,3,0,0" Visibility="Collapsed" MaxHeight="48" />
+                                                </StackPanel>
+
+                                                <StackPanel x:Name="rowActions" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.55">
+                                                    <Button Style="{StaticResource IconButton}" Content="&#xE8A7;" Tag="{Binding TargetPath}" Click="OnOpenHistoryFileClick" ToolTip="Open" Width="28" Height="28" FontSize="12" />
+                                                    <Button Style="{StaticResource IconButton}" Content="&#xE838;" Tag="{Binding TargetPath}" Click="OnOpenHistoryFolderClick" ToolTip="Show in Explorer" Width="28" Height="28" FontSize="12" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsSuccess}" Value="False">
+                                                <Setter TargetName="statusBg" Property="Background" Value="{StaticResource DangerSubtleBrush}" />
+                                                <Setter TargetName="statusIcon" Property="Text" Value="&#xE711;" />
+                                                <Setter TargetName="statusIcon" Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                                <Setter TargetName="error" Property="Visibility" Value="Visible" />
+                                                <Setter TargetName="detail" Property="Visibility" Value="Collapsed" />
+                                                <Setter TargetName="rowActions" Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="row" Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+                                                <Setter TargetName="rowActions" Property="Opacity" Value="1" />
+                                            </Trigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <StackPanel x:Name="EmptyHistoryNotice" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                                <TextBlock Text="&#xE81C;" Style="{StaticResource Icon}" FontSize="26" Foreground="{StaticResource TextTertiaryBrush}" />
+                                <TextBlock Text="No activity yet" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4" />
+                                <TextBlock Style="{StaticResource Caption}" TextAlignment="Center" HorizontalAlignment="Center">
+                                    Drag a file and press <Run x:Name="EmptyHistoryKeyRun" Text="Shift" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" /> to get started.
+                                </TextBlock>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- ======================= SETTINGS ======================= -->
+            <ScrollViewer x:Name="ViewSettings" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel MaxWidth="860" Margin="28,24,28,32">
+                    <TextBlock Text="Settings" Style="{StaticResource H1}" />
+                    <TextBlock Text="Changes are saved automatically." Style="{StaticResource Caption}" Margin="0,4,0,24" />
+
+                    <!-- Output -->
+                    <TextBlock Text="Output" Style="{StaticResource SectionLabel}" />
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,24">
+                        <StackPanel>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE8B7;" Style="{StaticResource Icon}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Save location" FontWeight="SemiBold" />
+                                    <TextBlock Text="Where converted files are written" Style="{StaticResource Caption}" Margin="0,2,0,12" />
+                                    <RadioButton x:Name="SaveSameDirRadio" Content="Next to the original file" IsChecked="True" Margin="0,0,0,10" Checked="OnSettingChanged" />
+                                    <RadioButton x:Name="SaveCustomDirRadio" Content="A folder I choose" Checked="OnSettingChanged" />
+                                    <Grid x:Name="CustomDirPanel" Visibility="Collapsed" Margin="28,10,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBox x:Name="CustomDirBox" IsReadOnly="True" FontSize="12" />
+                                        <Button Grid.Column="1" Content="Browse…" Click="OnBrowseOutputDirClick" Margin="8,0,0,0" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource RowDivider}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE8C8;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Replace existing files" FontWeight="SemiBold" />
+                                    <TextBlock Text="When off, a number is added instead (photo_1.png)" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <CheckBox x:Name="OverwriteCheck" Grid.Column="2" Style="{StaticResource ToggleSwitch}" IsChecked="False" VerticalAlignment="Center"
+                                          Checked="OnSettingChanged" Unchecked="OnSettingChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Wheel -->
+                    <TextBlock Text="Wheel" Style="{StaticResource SectionLabel}" />
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,24">
+                        <StackPanel>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE740;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Size" FontWeight="SemiBold" />
+                                    <TextBlock Text="How large the wheel appears on screen" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock x:Name="WheelScaleText" Text="100%" Style="{StaticResource Caption}" Width="110" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" />
+                                    <Slider x:Name="WheelScaleSlider" Width="200" Minimum="0.60" Maximum="1.35" Value="1.0" SmallChange="0.05" LargeChange="0.1"
+                                            VerticalAlignment="Center" ValueChanged="OnWheelScaleSliderChanged" />
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource RowDivider}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE765;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Close when the shortcut key is released" FontWeight="SemiBold" />
+                                    <TextBlock Text="On: hold the key while you choose; letting go cancels. Off: the wheel stays open until you drop the file or press Esc." Style="{StaticResource Caption}" Margin="0,2,24,0" />
+                                </StackPanel>
+                                <CheckBox x:Name="CloseOnReleaseCheck" Grid.Column="2" Style="{StaticResource ToggleSwitch}" IsChecked="False" VerticalAlignment="Center"
+                                          Checked="OnSettingChanged" Unchecked="OnSettingChanged" />
+                            </Grid>
+                            <Border Style="{StaticResource RowDivider}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE767;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Sound feedback" FontWeight="SemiBold" />
+                                    <TextBlock Text="A soft tick when moving between options and switching wheels" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="Play sample" Click="OnTestSoundClick" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                <CheckBox x:Name="SoundFeedbackCheck" Grid.Column="3" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"
+                                          Checked="OnSettingChanged" Unchecked="OnSettingChanged" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Notifications -->
+                    <TextBlock Text="Notifications" Style="{StaticResource SectionLabel}" />
+                    <Border Style="{StaticResource Card}" Margin="0,0,0,24">
+                        <Grid Style="{StaticResource SettingRow}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="&#xEA8F;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Show a notification when done" FontWeight="SemiBold" />
+                                <TextBlock Text="A small card in the corner with Open and the result size" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <CheckBox x:Name="ShowToastCheck" Grid.Column="2" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"
+                                      Checked="OnSettingChanged" Unchecked="OnSettingChanged" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Engine -->
+                    <TextBlock Text="Engine" Style="{StaticResource SectionLabel}" />
+                    <Border Style="{StaticResource Card}">
+                        <StackPanel>
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE714;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="FFmpeg" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="FFmpegPathText" Text="Used for video, audio and most image formats" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                </StackPanel>
+                                <Border x:Name="FFmpegBadge" Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center" BorderThickness="0">
+                                    <TextBlock x:Name="FFmpegStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
+                                </Border>
+                            </Grid>
+                            <Border Style="{StaticResource RowDivider}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE8F1;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Office documents" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="DocEngineText" Text="Word, Excel and PowerPoint formats, plus OpenDocument" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Border x:Name="DocEngineBadge" Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
+                                    <TextBlock x:Name="DocEngineStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
+                                </Border>
+                            </Grid>
+                            <Border Style="{StaticResource RowDivider}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE8A5;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="PDF" FontWeight="SemiBold" />
+                                    <TextBlock Text="Windows PDF renderer, PDFsharp and PdfPig. Built in, nothing to install." Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Border Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center" Background="{StaticResource SuccessSubtleBrush}">
+                                    <TextBlock Text="Ready" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}" />
+                                </Border>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- ======================= ABOUT ======================= -->
+            <ScrollViewer x:Name="ViewAbout" Visibility="Collapsed" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel MaxWidth="860" Margin="28,24,28,32">
+
+                    <!-- Identity -->
+                    <Grid Margin="0,0,0,24">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Width="56" Height="56" CornerRadius="14" Margin="0,0,18,0">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#FF8A55" Offset="0" />
+                                    <GradientStop Color="#F2541B" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <TextBlock Text="OG" Foreground="White" FontWeight="Bold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="OG Converter" Style="{StaticResource H1}" />
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" Text="Version 1.0  ·  Offline file conversion for Windows" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Story -->
+                    <Border Style="{StaticResource Card}" Padding="24,22" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="WHY IT EXISTS" Style="{StaticResource Overline}" Margin="0,0,0,12" />
+                            <Border BorderBrush="{StaticResource AccentBrush}" BorderThickness="3,0,0,0" Padding="16,2,0,2" Margin="0,0,0,16">
+                                <TextBlock Style="{StaticResource Body}" FontSize="16" FontFamily="{StaticResource DisplayFont}" LineHeight="24"
+                                           Text="“Powered by pure boredom, caffeine, and living in a world with no superpowers, no magic, and no zombie apocalypse to save us from desk jobs.”" />
+                            </Border>
+                            <TextBlock Style="{StaticResource Caption}" FontSize="13" LineHeight="21" Margin="0,0,0,10"
+                                       Text="Online converters upload your confidential files to someone else's server, make you solve CAPTCHAs, park you in a fake 30-second queue and show you ads, all to turn a WebP into a PNG." />
+                            <TextBlock Style="{StaticResource Caption}" FontSize="13" LineHeight="21"
+                                       Text="OG Converter is built for developers, designers and power users who value flow. Drag a file, tap a key, let go. Everything runs on your machine: no cloud, no telemetry, no account." />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Facts -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Style="{StaticResource Card}" Padding="22,20">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                    <TextBlock Text="&#xE950;" Style="{StaticResource Icon}" Foreground="{StaticResource ModeToolsBrush}" Margin="0,0,10,0" />
+                                    <TextBlock Text="Under the hood" Style="{StaticResource H2}" />
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Native Windows app on .NET 10 and WPF" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Low-level keyboard and mouse hooks for the drag gesture" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Explorer shell automation to find the dragged file" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="FFmpeg for media, Windows PDF engine for documents" />
+                                <TextBlock Style="{StaticResource Caption}" Text="Windows today. A Linux version is on the way." />
+                            </StackPanel>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="22,20">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                    <TextBlock Text="&#xEA18;" Style="{StaticResource Icon}" Foreground="{StaticResource SuccessBrush}" Margin="0,0,10,0" />
+                                    <TextBlock Text="Privacy" Style="{StaticResource H2}" />
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Works fully offline. Files never leave your PC." />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="No analytics, telemetry or tracking of any kind" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="No account, no sign-in, no license server" />
+                                <TextBlock Style="{StaticResource Caption}" Text="Small footprint while waiting in the system tray" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- Developers -->
+                    <Border Style="{StaticResource Card}" Padding="24,22" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="DEVELOPERS" Style="{StaticResource Overline}" Margin="0,0,0,14" />
+                            <UniformGrid Columns="3">
+                                <UniformGrid.Resources>
+                                    <Style x:Key="DevAvatar" TargetType="Border">
+                                        <Setter Property="Width" Value="40" />
+                                        <Setter Property="Height" Value="40" />
+                                        <Setter Property="CornerRadius" Value="20" />
+                                        <Setter Property="Background" Value="{StaticResource AccentSubtleBrush}" />
+                                        <Setter Property="Margin" Value="0,0,12,0" />
+                                    </Style>
+                                    <Style x:Key="DevInitials" TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                        <Setter Property="FontSize" Value="14" />
+                                        <Setter Property="HorizontalAlignment" Value="Center" />
+                                        <Setter Property="VerticalAlignment" Value="Center" />
+                                    </Style>
+                                </UniformGrid.Resources>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                                    <Border Style="{StaticResource DevAvatar}">
+                                        <TextBlock Text="AS" Style="{StaticResource DevInitials}" />
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Anandhu Suresh" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <TextBlock FontSize="12" Margin="0,2,0,0">
+                                            <Hyperlink NavigateUri="https://dr-at0mic.github.io/" RequestNavigate="OnLinkRequestNavigate"
+                                                       Foreground="{StaticResource AccentBrush}" TextDecorations="{x:Null}"
+                                                       ToolTip="https://dr-at0mic.github.io/">Portfolio ↗</Hyperlink>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                                    <Border Style="{StaticResource DevAvatar}">
+                                        <TextBlock Text="MP" Style="{StaticResource DevInitials}" />
+                                    </Border>
+                                    <TextBlock Text="Mahesh P S" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Style="{StaticResource DevAvatar}">
+                                        <TextBlock Text="BP" Style="{StaticResource DevInitials}" />
+                                    </Border>
+                                    <TextBlock Text="Bijo Prasad" FontWeight="SemiBold" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </UniformGrid>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock Style="{StaticResource Caption}" Foreground="{StaticResource TextTertiaryBrush}" FontSize="12" TextAlignment="Center" Margin="0,8,0,0"
+                               Text="Inspired by the wonderful Tangerine for Mac (tangerineformac.com). Rebuilt natively for Windows." />
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Window>

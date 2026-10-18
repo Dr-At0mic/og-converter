@@ -1,0 +1,127 @@
+<Window x:Class="OgConverter.Views.RadialWheelOverlay"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:OgConverter.Controls"
+        Title="OG Converter Overlay"
+        Width="560" Height="620"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="#01000000"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        FontFamily="{StaticResource UiFont}"
+        TextOptions.TextFormattingMode="Display"
+        AllowDrop="True"
+        DragEnter="OnDragEnter"
+        DragOver="OnDragOver"
+        DragLeave="OnDragLeave"
+        Drop="OnDrop">
+
+    <Window.Resources>
+        <Storyboard x:Key="OpenAnimation">
+            <DoubleAnimation Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Opacity"
+                             From="0.0" To="1.0" Duration="0:0:0.14" />
+            <DoubleAnimation Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleX"
+                             From="0.9" To="1.0" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleY"
+                             From="0.9" To="1.0" Duration="0:0:0.2">
+                <DoubleAnimation.EasingFunction>
+                    <CubicEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+
+        <!-- Keyboard key -->
+        <Style x:Key="KeyCap" TargetType="Border">
+            <Setter Property="BorderThickness" Value="1,1,1,2" />
+            <Setter Property="BorderBrush" Value="#3A3D46" />
+            <Setter Property="Background" Value="#1C1E24" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,0,6,1" />
+            <Setter Property="Margin" Value="0,0,7,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="KeyText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#A1A6B0" />
+        </Style>
+        <Style x:Key="ModeLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#ECEDEF" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="ModeSegment" TargetType="Border">
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="8,5,10,5" />
+            <Setter Property="Margin" Value="2,0" />
+        </Style>
+    </Window.Resources>
+
+    <Grid x:Name="RootGrid" RenderTransformOrigin="0.5, 0.44" AllowDrop="True">
+        <Grid.RenderTransform>
+            <ScaleTransform x:Name="ScaleTransform" ScaleX="1.0" ScaleY="1.0" />
+        </Grid.RenderTransform>
+
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <controls:RadialWheelCanvas x:Name="WheelCanvas" Grid.Row="0" Width="460" Height="460"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" AllowDrop="True" />
+
+        <!-- Mode switcher hint -->
+        <Border Grid.Row="1" HorizontalAlignment="Center" Margin="0,4,0,24"
+                Background="#F515171C" BorderBrush="#30FFFFFF" BorderThickness="1" CornerRadius="10" Padding="4">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="22" ShadowDepth="5" Direction="270" Opacity="0.45" Color="#000000" />
+            </Border.Effect>
+
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Border x:Name="ConvertBadge" Style="{StaticResource ModeSegment}">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="ConvertKeyCap" Style="{StaticResource KeyCap}">
+                            <TextBlock x:Name="ConvertKeyText" Text="Shift" Style="{StaticResource KeyText}" />
+                        </Border>
+                        <TextBlock Text="Convert" Style="{StaticResource ModeLabel}" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="ToolsBadge" Style="{StaticResource ModeSegment}">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="ToolsKeyCap" Style="{StaticResource KeyCap}">
+                            <TextBlock x:Name="ToolsKeyText" Text="Ctrl" Style="{StaticResource KeyText}" />
+                        </Border>
+                        <TextBlock Text="Tools" Style="{StaticResource ModeLabel}" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="ActionsBadge" Style="{StaticResource ModeSegment}">
+                    <StackPanel Orientation="Horizontal">
+                        <Border x:Name="ActionsKeyCap" Style="{StaticResource KeyCap}">
+                            <TextBlock x:Name="ActionsKeyText" Text="Alt" Style="{StaticResource KeyText}" />
+                        </Border>
+                        <TextBlock Text="Actions" Style="{StaticResource ModeLabel}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Width="1" Height="16" Background="#30FFFFFF" Margin="6,0" />
+
+                <Border Style="{StaticResource ModeSegment}" Opacity="0.75">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Style="{StaticResource KeyCap}">
+                            <TextBlock x:Name="CancelKeyText" Text="Esc" Style="{StaticResource KeyText}" />
+                        </Border>
+                        <TextBlock x:Name="CancelLabel" Text="Cancel" Style="{StaticResource ModeLabel}" Foreground="#A1A6B0" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

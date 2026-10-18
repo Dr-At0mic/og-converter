@@ -1,0 +1,35 @@
+# Graphify Output & Caches
+graphify-out/
+.graphify*
+
+# Build Results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio & IDEs
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.ide/
+.vscode/
+
+# Rider & JetBrains
+.idea/
+
+# OS Generated Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Python & Environment caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
