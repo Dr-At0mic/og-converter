@@ -10,6 +10,8 @@
     <AssemblyName>og-converter</AssemblyName>
     <RootNamespace>OgConverter</RootNamespace>
     <Product>OG Converter</Product>
+    <!-- Release workflow overrides this from the tag (v1.2.3 → 1.2.3) -->
+    <Version>1.0.0</Version>
     <ApplicationIcon>Assets\og-converter.ico</ApplicationIcon>
   </PropertyGroup>
 

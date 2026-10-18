@@ -1,0 +1,88 @@
+# Builds the self-contained Windows .exe and publishes it to GitHub Releases.
+#
+# Release by pushing a version tag:
+#   git tag v1.0.0
+#   git push origin v1.0.0
+#
+# Or run it manually from the Actions tab ("Run workflow") and enter a version.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (without the leading v)"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write # create the release and upload the .exe
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ github.event.inputs.version }}" } else { "${{ github.ref_name }}".TrimStart("v") }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Version '$version' must look like 1.0.0" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish single-file exe
+        shell: pwsh
+        run: >
+          dotnet publish og-converter.csproj
+          -c Release -r win-x64 --self-contained
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -o publish
+
+      - name: Package release assets
+        id: assets
+        shell: pwsh
+        run: |
+          $name = "og-converter-v${{ steps.version.outputs.version }}-win-x64.exe"
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item publish/og-converter.exe "dist/$name"
+          $hash = (Get-FileHash "dist/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Out-File -Encoding ascii "dist/$name.sha256"
+          "exe=dist/$name" >> $env:GITHUB_OUTPUT
+          "sha=dist/$name.sha256" >> $env:GITHUB_OUTPUT
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: OG Converter ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          body: |
+            ## OG Converter ${{ steps.version.outputs.tag }} (Windows x64)
+
+            Download **og-converter-${{ steps.version.outputs.tag }}-win-x64.exe** and run it; no install or .NET runtime needed.
+
+            - Requires Windows 10 (1809) or later. Linux support is coming soon.
+            - Media features (video, audio, GIF, WebP/AVIF/JPEG XL) need FFmpeg: `winget install Gyan.FFmpeg`
+            - Verify the download with the `.sha256` file: `Get-FileHash <file> -Algorithm SHA256`
+
+            Found a bug or hit a problem? Please open an issue.
+          files: |
+            ${{ steps.assets.outputs.exe }}
+            ${{ steps.assets.outputs.sha }}
