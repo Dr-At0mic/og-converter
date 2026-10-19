@@ -93,6 +93,11 @@ namespace OgConverter.Services
                     {
                         ReadDesktopSelection(windows, results);
                     }
+                    else if (IdeSelectionService.IsChromiumWindow(target))
+                    {
+                        // VS Code-based editors: their file tree, through UI Automation
+                        results.AddRange(IdeSelectionService.GetFiles(target, pt.X, pt.Y));
+                    }
                     else
                     {
                         ReadExplorerWindowSelection(windows, target, results);
@@ -100,6 +105,10 @@ namespace OgConverter.Services
 
                     if (results.Count > 0) return results;
                 }
+
+                // The user is in another app (an IDE, a browser…): a selection left in some background Explorer
+                // window has nothing to do with what they're dragging, so don't guess
+                if (targets.Count > 0 && IsOtherApp(targets[0])) return results;
 
                 // Fallback: first Explorer window with a selection, then the desktop
                 foreach (dynamic w in windows)
@@ -213,6 +222,21 @@ namespace OgConverter.Services
             {
                 results.Add(path);
             }
+        }
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+        /// <summary>A window of some other application: not Explorer, the desktop, the taskbar, or OG Converter itself.</summary>
+        private static bool IsOtherApp(IntPtr hwnd)
+        {
+            if (hwnd == IntPtr.Zero) return false;
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == (uint)Environment.ProcessId) return false;
+
+            var sb = new StringBuilder(64);
+            GetClassName(hwnd, sb, sb.Capacity);
+            return sb.ToString() is not ("CabinetWClass" or "ExploreWClass" or "Progman" or "WorkerW" or "Shell_TrayWnd" or "Shell_SecondaryTrayWnd");
         }
 
         private static bool IsDesktopWindow(IntPtr hwnd)

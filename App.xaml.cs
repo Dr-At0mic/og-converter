@@ -43,9 +43,13 @@ namespace OgConverter
             {
                 // Headless: report and exit with a code instead of showing an error dialog nobody can close
                 int exitCode = 0;
+                string templateTestDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "og-template-test-" + Guid.NewGuid().ToString("N")[..8]);
+                Tests.TemplateVerification.IsolateTemplatesFolder(templateTestDir);
                 try
                 {
                     Task.Run(async () => await Tests.VerificationRunner.RunSelfTestAsync()).GetAwaiter().GetResult();
+                    // Renders WPF visuals, so it runs here on the UI (STA) thread
+                    Tests.TemplateVerification.Run(templateTestDir);
                 }
                 catch (Exception ex)
                 {
@@ -79,7 +83,47 @@ namespace OgConverter
                 catch { }
             }
 
+            if (Array.IndexOf(e.Args, Services.InstallService.UninstallArg) >= 0)
+            {
+                RunUninstall(quiet: Array.IndexOf(e.Args, "--quiet") >= 0);
+                Shutdown();
+                return;
+            }
+
             base.OnStartup(e);
+
+            var main = new MainWindow();
+            MainWindow = main;
+            if (Array.IndexOf(e.Args, Services.InstallService.BackgroundArg) >= 0)
+            {
+                // Started with Windows: stay in the tray. Hooks and the tray icon need the window handle, not a visible window.
+                main.StartHidden();
+            }
+            else
+            {
+                main.Show();
+            }
+        }
+
+        private static void RunUninstall(bool quiet)
+        {
+            if (!quiet)
+            {
+                var answer = MessageBox.Show(
+                    "Remove OG Converter from this PC?\n\nYour settings and wheel templates in %AppData%\\OGConverter are kept.",
+                    "Uninstall OG Converter", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+                if (answer != MessageBoxResult.OK) return;
+            }
+
+            try
+            {
+                Services.InstallService.Uninstall();
+                if (!quiet) MessageBox.Show("OG Converter has been removed.", "Uninstall OG Converter", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                if (!quiet) MessageBox.Show($"Couldn't finish removing OG Converter:\n{ex.Message}", "Uninstall OG Converter", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
     }
 }

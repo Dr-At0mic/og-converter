@@ -150,6 +150,8 @@ namespace OgConverter.Services
                     AddIfDifferent(list, "PDF", "Rendered, print-ready PDF", "pdf", "\uE8A5");
                     AddIfDifferent(list, "DOCX", "Formatted Word document", "docx", WordGlyph);
                     AddIfDifferent(list, "ODT", "Formatted OpenDocument Text", "odt", WordGlyph);
+                    AddIfDifferent(list, "RTF", "Formatted Rich Text, opens anywhere", "rtf", WordGlyph);
+                    AddIfDifferent(list, "TXT", "Plain text without Markdown symbols", "txt", "");
                     break;
 
                 case FileCategory.Document when currentExt is "TXT" or "HTML" or "HTM":
@@ -233,6 +235,8 @@ namespace OgConverter.Services
             {
                 case FileCategory.Image:
                     AddCompress(list, filePath);
+                    // SVG is vector: there's no pixel grid to cut
+                    if (currentExt != "SVG") list.Add(new WheelItem { Id = "tool_crop", Title = "Crop", Description = "Pick the area to keep on a preview", IconGlyph = "", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_resize_50", Title = "Half Size", Description = "Halve image dimensions", IconGlyph = "\uE740", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_grayscale", Title = "Grayscale", Description = "Remove color saturation", IconGlyph = "\uE790", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_strip_meta", Title = "Remove EXIF", Description = "Remove GPS and camera metadata for privacy", IconGlyph = "\uEA18", Mode = WheelMode.Tools });
@@ -240,6 +244,8 @@ namespace OgConverter.Services
 
                 case FileCategory.Video:
                     AddCompress(list, filePath);
+                    list.Add(new WheelItem { Id = "tool_trim", Title = "Trim", Description = "Keep only the part between a start and end time", IconGlyph = "", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_crop", Title = "Crop", Description = "Pick the area of the picture to keep", IconGlyph = "", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_mute", Title = "Mute", Description = "Strip audio track from video", IconGlyph = "\uE74F", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_720p", Title = "720p", Description = "Scale down video to 720p HD", IconGlyph = "\uE7F4", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_trim_10s", Title = "First 10s", Description = "Trim first 10 seconds sample", IconGlyph = "\uE8C6", Mode = WheelMode.Tools });

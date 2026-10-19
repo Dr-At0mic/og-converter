@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -22,12 +22,15 @@ namespace OgConverter.Tests
         public static void Run(string outDir)
         {
             Directory.CreateDirectory(outDir);
+            // Snapshots capture a single frame: no open/hover animations in flight
+            Controls.RadialWheelCanvas.ReduceMotion = true;
             string pdf = Path.Combine(outDir, "Quarterly Report.pdf");
             VerificationRunner.CreateDummyPdf(pdf, 12);
 
             // Main window, every tab, at default and large sizes
             var main = new MainWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000, ShowActivated = false };
             main.Show();
+            Controls.RadialWheelCanvas.ReduceMotion = true;
             foreach (var (w, h) in new[] { (1020, 720), (1440, 900) })
             {
                 main.Width = w;
@@ -164,6 +167,35 @@ namespace OgConverter.Tests
             SnapCompress(pptx, "office_lossy");
             SnapCompress(log, "general");
 
+            // Crop (image with a 16:9 selection, video) and Trim
+            void SnapWindow(Window dlg, string name, Action? setup = null)
+            {
+                dlg.Left = -20000;
+                dlg.Top = -20000;
+                dlg.ShowActivated = false;
+                dlg.WindowStartupLocation = WindowStartupLocation.Manual;
+                dlg.Show();
+                PumpFor(TimeSpan.FromSeconds(3)); // preview frames load in the background
+                setup?.Invoke();
+                PumpFor(TimeSpan.FromSeconds(1));
+                Save((FrameworkElement)dlg.Content, Path.Combine(outDir, $"dialog_{name}.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
+                dlg.Close();
+            }
+
+            if (ffmpeg != null)
+            {
+                string photo = Path.Combine(outDir, "Landscape.png");
+                Task.Run(() => MediaToolkit.RunAsync(ffmpeg, new[] { "-f", "lavfi", "-i", "testsrc2=s=1600x1000", "-frames:v", "1", photo })).GetAwaiter().GetResult();
+                var crop = new CropDialog(photo, isVideo: false, ffmpeg);
+                SnapWindow(crop, "crop_image", () => crop.RatioPanel.Children.OfType<RadioButton>().First(r => (string)r.Content == "16:9").IsChecked = true);
+
+                var cropVideo = new CropDialog(mp4, isVideo: true, ffmpeg);
+                SnapWindow(cropVideo, "crop_video", () => cropVideo.Cropper.SetSelection(new Rect(400, 150, 900, 700)));
+
+                var trim = new TrimDialog(mp4, ffmpeg);
+                SnapWindow(trim, "trim", () => trim.Timeline.SetRange(0.8, 2.2));
+            }
+
             static void ClickChip(CompressDialog d, string label)
             {
                 foreach (var chip in d.PresetPanel.Children.OfType<RadioButton>().ToList())
@@ -202,6 +234,44 @@ namespace OgConverter.Tests
             main.LoadFileIntoPlayground(pdf);
             main.PlaygroundWheel.HoveredIndex = 2;
             Save((FrameworkElement)main.Content, Path.Combine(outDir, "main_overview_playground.png"), null);
+
+            // Every wheel template: the app in its colors, each wheel, and the smallest size
+            Controls.RadialWheelCanvas.ReduceMotion = true; // MainWindow applied the user's setting
+            string originalTemplate = TemplateManager.Instance.Current.Id;
+            var wheel = new RadialWheelOverlay { Left = -20000, Top = -20000, ShowActivated = false };
+            wheel.UpdateKeyLabels("Shift", "Control", "Alt");
+            wheel.Show();
+            foreach (var template in TemplateManager.Instance.Templates.ToList())
+            {
+                TemplateManager.Instance.Apply(template.Id);
+                string id = template.Id;
+                main.TabOverview.IsChecked = true;
+                Save((FrameworkElement)main.Content, Path.Combine(outDir, $"tpl_{id}_home.png"), null);
+                main.TabSettings.IsChecked = true;
+                Save((FrameworkElement)main.Content, Path.Combine(outDir, $"tpl_{id}_settings.png"), null);
+
+                wheel.ApplyScale(1.0, true);
+                foreach (var mode in new[] { WheelMode.Convert, WheelMode.Tools, WheelMode.Actions })
+                {
+                    wheel.SwitchMode(mode);
+                    wheel.SetCurrentFile(pdf);
+                    wheel.WheelCanvas.HoveredIndex = 1;
+                    Save((FrameworkElement)wheel.Content, Path.Combine(outDir, $"tpl_{id}_wheel_{mode.ToString().ToLowerInvariant()}.png"), Color.FromRgb(0x5A, 0x6B, 0x86));
+                }
+                wheel.WheelCanvas.HoveredIndex = -1;
+                Save((FrameworkElement)wheel.Content, Path.Combine(outDir, $"tpl_{id}_wheel_idle_light.png"), Color.FromRgb(0xF3, 0xF4, 0xF6));
+
+                wheel.ApplyScale(0.4, true);
+                wheel.SwitchMode(WheelMode.Convert);
+                wheel.SetCurrentFile(pdf);
+                wheel.WheelCanvas.HoveredIndex = 2;
+                Save((FrameworkElement)wheel.Content, Path.Combine(outDir, $"tpl_{id}_wheel_40.png"), Color.FromRgb(0x5A, 0x6B, 0x86));
+                wheel.ApplyScale(0.4, false);
+                Save((FrameworkElement)wheel.Content, Path.Combine(outDir, $"tpl_{id}_wheel_40_nohints.png"), Color.FromRgb(0x5A, 0x6B, 0x86));
+            }
+            wheel.Close();
+            TemplateManager.Instance.Apply(originalTemplate);
+            main.TabOverview.IsChecked = true;
 
             main.Close();
         }

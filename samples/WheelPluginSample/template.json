@@ -1,0 +1,16 @@
+{
+  "id": "petals",
+  "name": "Petals",
+  "author": "OG Converter samples",
+  "description": "Sample plugin renderer: options bloom as petals.",
+  "renderer": "petals",
+  "wheel": {
+    "ring": "#E6162019", "hub": "#121A15", "text": "#EAF5EC", "textMuted": "#A3BFA9", "textFaint": "#738F79",
+    "edge": "#3399E2B4", "divider": "#18FFFFFF", "shadow": "#90000000",
+    "convert": "#7DDE92", "tools": "#F7B2BD", "actions": "#F4E285"
+  },
+  "app": { "base": "dark", "window": "#0B110D", "surface": "#121A15", "surfaceRaised": "#18231C", "accent": "#7DDE92", "cardRadius": 16 },
+  "motion": { "open": "spring", "switch": "stagger", "durationMs": 360 },
+  "sounds": { "pack": "bubble" },
+  "options": { "petalWidth": "0.5" }
+}

@@ -9,6 +9,7 @@
         Background="#01000000"
         Topmost="True"
         ShowInTaskbar="False"
+        ShowActivated="False"
         WindowStartupLocation="Manual"
         FontFamily="{StaticResource UiFont}"
         TextOptions.TextFormattingMode="Display"
@@ -19,55 +20,47 @@
         Drop="OnDrop">
 
     <Window.Resources>
+        <!-- The wheel itself animates (template motion); the window only fades so the hint bar doesn't pop in -->
         <Storyboard x:Key="OpenAnimation">
             <DoubleAnimation Storyboard.TargetName="RootGrid" Storyboard.TargetProperty="Opacity"
-                             From="0.0" To="1.0" Duration="0:0:0.14" />
-            <DoubleAnimation Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleX"
-                             From="0.9" To="1.0" Duration="0:0:0.2">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut" />
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
-            <DoubleAnimation Storyboard.TargetName="ScaleTransform" Storyboard.TargetProperty="ScaleY"
-                             From="0.9" To="1.0" Duration="0:0:0.2">
-                <DoubleAnimation.EasingFunction>
-                    <CubicEase EasingMode="EaseOut" />
-                </DoubleAnimation.EasingFunction>
-            </DoubleAnimation>
+                             From="0.0" To="1.0" Duration="0:0:0.1" />
         </Storyboard>
 
-        <!-- Keyboard key -->
+        <!-- Colors come from the active template (set in code) -->
+        <SolidColorBrush x:Key="HintBarBrush" Color="#F515171C" />
+        <SolidColorBrush x:Key="HintEdgeBrush" Color="#30FFFFFF" />
+        <SolidColorBrush x:Key="KeyCapBrush" Color="#1C1E24" />
+        <SolidColorBrush x:Key="KeyCapEdgeBrush" Color="#3A3D46" />
+        <SolidColorBrush x:Key="KeyTextBrush" Color="#A1A6B0" />
+        <SolidColorBrush x:Key="HintLabelBrush" Color="#ECEDEF" />
+
         <Style x:Key="KeyCap" TargetType="Border">
-            <Setter Property="BorderThickness" Value="1,1,1,2" />
-            <Setter Property="BorderBrush" Value="#3A3D46" />
-            <Setter Property="Background" Value="#1C1E24" />
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="6,0,6,1" />
-            <Setter Property="Margin" Value="0,0,7,0" />
+            <Setter Property="BorderThickness" Value="1,1,1,1.5" />
+            <Setter Property="BorderBrush" Value="{DynamicResource KeyCapEdgeBrush}" />
+            <Setter Property="Background" Value="{DynamicResource KeyCapBrush}" />
+            <Setter Property="CornerRadius" Value="3.5" />
+            <Setter Property="Padding" Value="4,0,4,1" />
+            <Setter Property="Margin" Value="0,0,5,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style x:Key="KeyText" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="9.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="#A1A6B0" />
+            <Setter Property="Foreground" Value="{DynamicResource KeyTextBrush}" />
         </Style>
         <Style x:Key="ModeLabel" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Foreground" Value="#ECEDEF" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource HintLabelBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style x:Key="ModeSegment" TargetType="Border">
-            <Setter Property="CornerRadius" Value="7" />
-            <Setter Property="Padding" Value="8,5,10,5" />
-            <Setter Property="Margin" Value="2,0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="5,3,7,3" />
+            <Setter Property="Margin" Value="1,0" />
         </Style>
     </Window.Resources>
 
-    <Grid x:Name="RootGrid" RenderTransformOrigin="0.5, 0.44" AllowDrop="True">
-        <Grid.RenderTransform>
-            <ScaleTransform x:Name="ScaleTransform" ScaleX="1.0" ScaleY="1.0" />
-        </Grid.RenderTransform>
-
+    <Grid x:Name="RootGrid" AllowDrop="True">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
@@ -76,11 +69,15 @@
         <controls:RadialWheelCanvas x:Name="WheelCanvas" Grid.Row="0" Width="460" Height="460"
                                     HorizontalAlignment="Center" VerticalAlignment="Center" AllowDrop="True" />
 
-        <!-- Mode switcher hint -->
-        <Border Grid.Row="1" HorizontalAlignment="Center" Margin="0,4,0,24"
-                Background="#F515171C" BorderBrush="#30FFFFFF" BorderThickness="1" CornerRadius="10" Padding="4">
+        <!-- Shortcut hints (Settings › Advanced can hide them); scales with the wheel -->
+        <Border x:Name="HintBar" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Top"
+                Background="{DynamicResource HintBarBrush}" BorderBrush="{DynamicResource HintEdgeBrush}" BorderThickness="1"
+                CornerRadius="8" Padding="3">
+            <Border.LayoutTransform>
+                <ScaleTransform x:Name="HintScale" ScaleX="1" ScaleY="1" />
+            </Border.LayoutTransform>
             <Border.Effect>
-                <DropShadowEffect BlurRadius="22" ShadowDepth="5" Direction="270" Opacity="0.45" Color="#000000" />
+                <DropShadowEffect BlurRadius="16" ShadowDepth="3" Direction="270" Opacity="0.35" Color="#000000" />
             </Border.Effect>
 
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
@@ -89,7 +86,7 @@
                         <Border x:Name="ConvertKeyCap" Style="{StaticResource KeyCap}">
                             <TextBlock x:Name="ConvertKeyText" Text="Shift" Style="{StaticResource KeyText}" />
                         </Border>
-                        <TextBlock Text="Convert" Style="{StaticResource ModeLabel}" />
+                        <TextBlock x:Name="ConvertLabel" Text="Convert" Style="{StaticResource ModeLabel}" />
                     </StackPanel>
                 </Border>
 
@@ -98,7 +95,7 @@
                         <Border x:Name="ToolsKeyCap" Style="{StaticResource KeyCap}">
                             <TextBlock x:Name="ToolsKeyText" Text="Ctrl" Style="{StaticResource KeyText}" />
                         </Border>
-                        <TextBlock Text="Tools" Style="{StaticResource ModeLabel}" />
+                        <TextBlock x:Name="ToolsLabel" Text="Tools" Style="{StaticResource ModeLabel}" />
                     </StackPanel>
                 </Border>
 
@@ -107,18 +104,18 @@
                         <Border x:Name="ActionsKeyCap" Style="{StaticResource KeyCap}">
                             <TextBlock x:Name="ActionsKeyText" Text="Alt" Style="{StaticResource KeyText}" />
                         </Border>
-                        <TextBlock Text="Actions" Style="{StaticResource ModeLabel}" />
+                        <TextBlock x:Name="ActionsLabel" Text="Actions" Style="{StaticResource ModeLabel}" />
                     </StackPanel>
                 </Border>
 
-                <Border Width="1" Height="16" Background="#30FFFFFF" Margin="6,0" />
+                <Border Width="1" Height="13" Background="{DynamicResource HintEdgeBrush}" Margin="4,0" />
 
                 <Border Style="{StaticResource ModeSegment}" Opacity="0.75">
                     <StackPanel Orientation="Horizontal">
-                        <Border Style="{StaticResource KeyCap}">
+                        <Border x:Name="CancelKeyCap" Style="{StaticResource KeyCap}">
                             <TextBlock x:Name="CancelKeyText" Text="Esc" Style="{StaticResource KeyText}" />
                         </Border>
-                        <TextBlock x:Name="CancelLabel" Text="Cancel" Style="{StaticResource ModeLabel}" Foreground="#A1A6B0" />
+                        <TextBlock x:Name="CancelLabel" Text="Cancel" Style="{StaticResource ModeLabel}" Foreground="{DynamicResource KeyTextBrush}" />
                     </StackPanel>
                 </Border>
             </StackPanel>

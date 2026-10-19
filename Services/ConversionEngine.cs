@@ -119,7 +119,11 @@ namespace OgConverter.Services
                 // An existing target only means success if nothing failed (actions start with target = source)
                 if (job.ErrorMessage == null && File.Exists(job.TargetPath))
                 {
-                    job.ConvertedSizeBytes = new FileInfo(job.TargetPath).Length;
+                    // Results written in place (hash, copy path) have no output file to compare sizes with
+                    if (!string.Equals(job.TargetPath, job.SourcePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        job.ConvertedSizeBytes = new FileInfo(job.TargetPath).Length;
+                    }
                     job.IsSuccess = true;
                 }
             }
@@ -286,6 +290,35 @@ namespace OgConverter.Services
                 return;
             }
 
+            // Crop: images and videos (the area comes from the Crop dialog)
+            if (job.Option.Id == "tool_crop")
+            {
+                if (job.Parameters?.Crop is not { } rect) throw new InvalidOperationException("No crop area was chosen.");
+                Func<string, string, string> targetFor = (ext, suffix) => GetTargetFilePath(job.SourcePath, ext, settings, suffix);
+                string? ffmpeg = IsFFmpegAvailable ? _ffmpegPath : null;
+
+                if (FormatRegistry.DetectCategory(job.SourcePath) == FileCategory.Video)
+                {
+                    if (ffmpeg == null) throw new InvalidOperationException("FFmpeg is required to crop videos.");
+                    job.TargetPath = await MediaEditService.CropVideoAsync(ffmpeg, job.SourcePath, rect, settings.VideoCrf, targetFor, progress);
+                }
+                else
+                {
+                    job.TargetPath = await MediaEditService.CropImageAsync(job.SourcePath, rect, ffmpeg, targetFor);
+                }
+                return;
+            }
+
+            // Trim: keep start–end of a video (times come from the Trim dialog)
+            if (job.Option.Id == "tool_trim")
+            {
+                var p = job.Parameters ?? throw new InvalidOperationException("No start and end were chosen.");
+                if (!IsFFmpegAvailable) throw new InvalidOperationException("FFmpeg is required to trim videos.");
+                job.TargetPath = await MediaEditService.TrimVideoAsync(_ffmpegPath!, job.SourcePath, p.TrimStart, p.TrimEnd, p.TrimFast, settings.VideoCrf,
+                    (ext, suffix) => GetTargetFilePath(job.SourcePath, ext, settings, suffix), progress);
+                return;
+            }
+
             // Extract Archive
             if (job.Option.Id == "tool_extract")
             {
@@ -300,12 +333,7 @@ namespace OgConverter.Services
             // SHA-256
             if (job.Option.Id == "tool_sha256")
             {
-                using var stream = File.OpenRead(job.SourcePath);
-                byte[] hash = await SHA256.Create().ComputeHashAsync(stream);
-                string hex = Convert.ToHexString(hash).ToLowerInvariant();
-                RunOnSta(() => Clipboard.SetText(hex));
-                job.TargetPath = job.SourcePath;
-                job.IsSuccess = true;
+                await HashToClipboardAsync(job, progress);
                 return;
             }
 
@@ -523,13 +551,7 @@ namespace OgConverter.Services
                     break;
 
                 case "act_sha256":
-                    using (var stream = File.OpenRead(job.SourcePath))
-                    {
-                        byte[] hash = await SHA256.Create().ComputeHashAsync(stream);
-                        string hex = Convert.ToHexString(hash).ToLowerInvariant();
-                        RunOnSta(() => Clipboard.SetText(hex));
-                    }
-                    job.IsSuccess = true;
+                    await HashToClipboardAsync(job, null);
                     break;
 
                 case "act_copy_file":
@@ -626,12 +648,13 @@ namespace OgConverter.Services
         /// </summary>
         private static void OpenTerminalAt(string dir)
         {
+            // Launch directly, not via the shell: ShellExecute on wt.exe (a Store app alias) "succeeds" without opening a window
             try
             {
                 Process.Start(new ProcessStartInfo("wt.exe")
                 {
                     ArgumentList = { "-d", dir },
-                    UseShellExecute = true,
+                    UseShellExecute = false,
                     WorkingDirectory = dir
                 });
                 return;
@@ -641,10 +664,11 @@ namespace OgConverter.Services
                 // Windows Terminal not installed
             }
 
+            // A console app started from a GUI app gets its own new console window
             Process.Start(new ProcessStartInfo("powershell.exe")
             {
                 ArgumentList = { "-NoExit", "-NoLogo" },
-                UseShellExecute = true,
+                UseShellExecute = false,
                 WorkingDirectory = dir
             });
         }
@@ -882,6 +906,32 @@ namespace OgConverter.Services
             return candidate;
         }
 
+
+        /// <summary>Computes the SHA-256 of the source, copies it, and records it as the job's visible result.</summary>
+        private static async Task HashToClipboardAsync(ConversionJob job, IProgress<double>? progress)
+        {
+            string hex = await Task.Run(async () =>
+            {
+                // Shared read so files open in another app (an image viewer, an editor) can still be hashed
+                await using var stream = new FileStream(job.SourcePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 20, useAsync: true);
+                using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                byte[] buffer = new byte[1 << 20];
+                long total = stream.Length, done = 0;
+                int read;
+                while ((read = await stream.ReadAsync(buffer)) > 0)
+                {
+                    sha.AppendData(buffer, 0, read);
+                    done += read;
+                    if (total > 0) progress?.Report((double)done / total);
+                }
+                return Convert.ToHexString(sha.GetHashAndReset()).ToLowerInvariant();
+            });
+
+            RunOnSta(() => Clipboard.SetText(hex));
+            job.TargetPath = job.SourcePath;
+            job.ResultText = hex;
+            job.IsSuccess = true;
+        }
 
         /// <summary>
         /// Runs clipboard work on an STA thread. Uses a short-lived thread rather than the UI dispatcher,

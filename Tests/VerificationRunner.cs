@@ -197,6 +197,9 @@ namespace OgConverter.Tests
                 await DocumentVerification.RunAsync(engine, settings, tempDir, testPdf);
                 await ProtectionVerification.RunAsync(engine, settings, tempDir, testPdf);
                 await CompressionVerification.RunAsync(engine, settings, tempDir);
+                await EditVerification.RunAsync(engine, settings, tempDir, testPng);
+                DragDropVerification.Run(tempDir);
+                await MarkdownVerification.RunAsync(engine, settings, tempDir, testPng);
 
                 Console.WriteLine("=== ALL VERIFICATION TESTS PASSED SUCCESSFULLY ===");
             }

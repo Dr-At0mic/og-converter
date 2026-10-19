@@ -13,7 +13,7 @@
         FontFamily="{StaticResource UiFont}"
         TextOptions.TextFormattingMode="Display">
 
-    <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderStrongBrush}" BorderThickness="1"
+    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderStrongBrush}" BorderThickness="1"
             CornerRadius="10" Margin="12" Padding="14,12" Effect="{StaticResource FlyoutShadow}">
         <Grid>
             <Grid.ColumnDefinitions>
@@ -23,19 +23,19 @@
             </Grid.ColumnDefinitions>
 
             <!-- Status -->
-            <Border x:Name="StatusBg" Grid.Column="0" Width="34" Height="34" CornerRadius="17" Background="{StaticResource SuccessSubtleBrush}"
+            <Border x:Name="StatusBg" Grid.Column="0" Width="34" Height="34" CornerRadius="17" Background="{DynamicResource SuccessSubtleBrush}"
                     VerticalAlignment="Center" Margin="0,0,12,0">
-                <TextBlock x:Name="StatusIcon" Text="&#xE73E;" Style="{StaticResource Icon}" FontSize="14" Foreground="{StaticResource SuccessBrush}" />
+                <TextBlock x:Name="StatusIcon" Text="&#xE73E;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource SuccessBrush}" />
             </Border>
 
             <!-- Details -->
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TitleText" Text="Done" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
-                <TextBlock x:Name="SubtitleText" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
-                <TextBlock x:Name="MetricsText" FontSize="11.5" Foreground="{StaticResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                <TextBlock x:Name="TitleText" Text="Done" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="SubtitleText" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                <TextBlock x:Name="MetricsText" FontSize="11.5" Foreground="{DynamicResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
                 <!-- Progress (long-running jobs only) -->
                 <Grid x:Name="ProgressTrack" Height="3" Margin="0,7,0,0" Visibility="Collapsed" ClipToBounds="True">
-                    <Border Background="{StaticResource BorderStrongBrush}" CornerRadius="1.5" />
+                    <Border Background="{DynamicResource BorderStrongBrush}" CornerRadius="1.5" />
                     <!-- Sweep until the first percentage arrives (some work can't be measured) -->
                     <Border x:Name="ProgressSweep" CornerRadius="1.5" Visibility="Collapsed">
                         <Border.Background>
@@ -44,12 +44,12 @@
                                     <TranslateTransform x:Name="SweepShift" X="-1" />
                                 </LinearGradientBrush.RelativeTransform>
                                 <GradientStop Color="Transparent" Offset="0.2" />
-                                <GradientStop Color="{StaticResource AccentColor}" Offset="0.5" />
+                                <GradientStop Color="{DynamicResource AccentColor}" Offset="0.5" />
                                 <GradientStop Color="Transparent" Offset="0.8" />
                             </LinearGradientBrush>
                         </Border.Background>
                     </Border>
-                    <Border x:Name="ProgressFill" Background="{StaticResource ModeToolsBrush}" CornerRadius="1.5" RenderTransformOrigin="0,0.5">
+                    <Border x:Name="ProgressFill" Background="{DynamicResource ModeToolsBrush}" CornerRadius="1.5" RenderTransformOrigin="0,0.5">
                         <Border.RenderTransform>
                             <ScaleTransform x:Name="ProgressScale" ScaleX="0" />
                         </Border.RenderTransform>

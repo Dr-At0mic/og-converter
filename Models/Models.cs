@@ -56,6 +56,15 @@ namespace OgConverter.Models
 
         /// <summary>Mode, format and quality choices, for Compress.</summary>
         public CompressionOptions? Compression { get; set; }
+
+        /// <summary>Area to keep, in pixels of the upright image or video frame, for Crop.</summary>
+        public System.Windows.Int32Rect? Crop { get; set; }
+
+        /// <summary>Part of the video to keep, in seconds, for Trim.</summary>
+        public double TrimStart { get; set; }
+        public double TrimEnd { get; set; }
+        /// <summary>Copy the streams instead of re-encoding: instant, but the cut snaps to the nearest keyframe.</summary>
+        public bool TrimFast { get; set; }
     }
 
     /// <summary>What kind of compression pipeline a file goes through.</summary>
@@ -195,6 +204,11 @@ namespace OgConverter.Models
         public long OriginalSizeBytes { get; set; }
         public long ConvertedSizeBytes { get; set; }
 
+        /// <summary>Value produced instead of a file (e.g. a checksum); shown in place of the size comparison.</summary>
+        public string? ResultText { get; set; }
+
+        public string DetailText => !string.IsNullOrEmpty(ResultText) ? $"Copied {ResultText}" : SizeComparisonText;
+
         public string SourceFileName => System.IO.Path.GetFileName(SourcePath);
         public string TargetFileName => System.IO.Path.GetFileName(TargetPath);
 
@@ -234,9 +248,22 @@ namespace OgConverter.Models
         public int VideoCrf { get; set; } = 24; // 18-28 typical
         public bool PlaySoundOnComplete { get; set; } = false;
         public bool ShowToastOnComplete { get; set; } = true;
+        /// <summary>Launch at sign-in, straight to the tray. Mirrors the HKCU Run entry, which is the source of truth.</summary>
         public bool StartWithWindows { get; set; } = false;
         public double WheelScale { get; set; } = 1.0;
         public bool SoundFeedbackEnabled { get; set; } = true;
+
+        /// <summary>Id of the active wheel template (see TemplateManager).</summary>
+        public string WheelTemplateId { get; set; } = "og-classic";
+
+        /// <summary>The Shift / Ctrl / Alt / Esc bar under the wheel.</summary>
+        public bool ShowKeyHints { get; set; } = true;
+
+        /// <summary>Skip wheel animations.</summary>
+        public bool ReduceMotion { get; set; } = false;
+
+        /// <summary>The "Running without installing" banner on Home was dismissed.</summary>
+        public bool HideInstallBanner { get; set; } = false;
 
         /// <summary>
         /// false (default): the wheel stays open after the shortcut key is let go; drop to choose, Esc to cancel.

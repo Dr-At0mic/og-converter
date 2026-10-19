@@ -1,35 +1,80 @@
-# Graphify Output & Caches
-graphify-out/
-.graphify*
-
-# Build Results
+# ---------------------------------------------------------------- Build output
+# Applies to the app and every project under samples/
 [Bb]in/
 [Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm64/
+
+# Local release builds (dotnet publish ... -o publish) and the release workflow's staging folder
+publish/
+dist/
+artifacts/
+
+# Packages and build logs
+*.nupkg
+*.snupkg
+*.binlog
+msbuild.log
 [Ll]og/
 [Ll]ogs/
 
-# Visual Studio & IDEs
+# Test results
+TestResults/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+
+# ---------------------------------------------------------------- Tools
+# Graphify knowledge graph output & caches
+graphify-out/
+.graphify*
+
+# Python helpers & environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# ---------------------------------------------------------------- Editors & IDEs
+# Visual Studio
 .vs/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
 *.ide/
-.vscode/
+
+# VS Code (keep shareable config if added later)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
 
 # Rider & JetBrains
 .idea/
+*.sln.iml
 
-# OS Generated Files
+# Editor temp files
+*.swp
+*~
+
+# AI coding assistants: personal, machine-specific settings
+.claude/settings.local.json
+
+# Office lock files (~$Report.docx) left while a test document is open, temp files, crash dumps
+~$*
+*.tmp
+*.dmp
+
+# ---------------------------------------------------------------- OS
 Thumbs.db
 ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
-
-# Python & Environment caches
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-env/

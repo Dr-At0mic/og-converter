@@ -8,19 +8,19 @@
         ResizeMode="NoResize" Topmost="True" ShowInTaskbar="True"
         WindowStartupLocation="CenterScreen"
         FontFamily="{StaticResource UiFont}" FontSize="13"
-        Foreground="{StaticResource TextPrimaryBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
         TextOptions.TextFormattingMode="Display">
 
     <Window.Resources>
         <!-- Lossless / Lossy card -->
         <Style x:Key="ModeCard" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="bd" Background="{StaticResource InputBrush}" BorderBrush="{StaticResource BorderBrush}"
+                        <Border x:Name="bd" Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1" CornerRadius="8" Padding="14,12">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -28,21 +28,21 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <Grid Width="18" Height="18" VerticalAlignment="Top" Margin="0,1,12,0">
-                                    <Ellipse x:Name="ring" Stroke="{StaticResource BorderStrongBrush}" StrokeThickness="1" Fill="{StaticResource SurfaceBrush}" />
-                                    <Ellipse x:Name="dot" Width="8" Height="8" Fill="White" Visibility="Collapsed" />
+                                    <Ellipse x:Name="ring" Stroke="{DynamicResource BorderStrongBrush}" StrokeThickness="1" Fill="{DynamicResource SurfaceBrush}" />
+                                    <Ellipse x:Name="dot" Width="8" Height="8" Fill="{DynamicResource OnAccentBrush}" Visibility="Collapsed" />
                                 </Grid>
                                 <ContentPresenter Grid.Column="1" />
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource TextTertiaryBrush}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TextTertiaryBrush}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                                <Setter TargetName="bd" Property="Background" Value="#14FF6B35" />
-                                <Setter TargetName="ring" Property="Fill" Value="{StaticResource AccentBrush}" />
-                                <Setter TargetName="ring" Property="Stroke" Value="{StaticResource AccentBrush}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AccentFaintBrush}" />
+                                <Setter TargetName="ring" Property="Fill" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="ring" Property="Stroke" Value="{DynamicResource AccentBrush}" />
                                 <Setter TargetName="dot" Property="Visibility" Value="Visible" />
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
@@ -57,7 +57,7 @@
 
         <!-- Preset chip -->
         <Style x:Key="PresetChip" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
             <Setter Property="Margin" Value="0,0,6,6" />
@@ -65,19 +65,19 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="bd" Background="{StaticResource InputBrush}" BorderBrush="{StaticResource BorderBrush}"
+                        <Border x:Name="bd" Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}"
                                 BorderThickness="1" CornerRadius="14" Padding="12,5">
                             <ContentPresenter />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource TextTertiaryBrush}" />
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource TextTertiaryBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-                                <Setter TargetName="bd" Property="Background" Value="#1FFF6B35" />
-                                <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                                <Setter TargetName="bd" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                <Setter TargetName="bd" Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -86,7 +86,7 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderStrongBrush}"
+    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderStrongBrush}"
             BorderThickness="1" CornerRadius="12" Margin="16" Effect="{StaticResource FlyoutShadow}">
         <StackPanel>
             <!-- Header (drag to move) -->
@@ -95,8 +95,8 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <Border Width="36" Height="36" CornerRadius="8" Background="#1F3B9EFF" Margin="0,0,14,0" VerticalAlignment="Top">
-                    <TextBlock Text="&#xE73F;" Style="{StaticResource Icon}" Foreground="{StaticResource ModeToolsBrush}" />
+                <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource ModeToolsSubtleBrush}" Margin="0,0,14,0" VerticalAlignment="Top">
+                    <TextBlock Text="&#xE73F;" Style="{StaticResource Icon}" Foreground="{DynamicResource ModeToolsBrush}" />
                 </Border>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <TextBlock x:Name="HeaderText" Text="Compress" Style="{StaticResource H2}" />
@@ -136,7 +136,7 @@
                     </StackPanel>
 
                     <!-- Settings for this file kind and mode (built in code) -->
-                    <Border Background="{StaticResource InputBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    <Border Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                             CornerRadius="8" Padding="16,14" Margin="0,12,0,0">
                         <StackPanel>
                             <TextBlock Text="SETTINGS" Style="{StaticResource Overline}" Margin="0,0,0,12" />
@@ -145,18 +145,18 @@
                     </Border>
 
                     <!-- Summary -->
-                    <Border Background="{StaticResource InputBrush}" CornerRadius="6" Padding="12,10" Margin="0,14,0,0">
+                    <Border Background="{DynamicResource InputBrush}" CornerRadius="6" Padding="12,10" Margin="0,14,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBlock x:Name="SummaryIcon" Text="&#xE946;" Style="{StaticResource Icon}" FontSize="12" Margin="0,1,8,0" VerticalAlignment="Top"
-                                       Foreground="{StaticResource TextSecondaryBrush}" />
+                                       Foreground="{DynamicResource TextSecondaryBrush}" />
                             <StackPanel Grid.Column="1">
                                 <TextBlock x:Name="SummaryText" FontSize="12" TextWrapping="Wrap" />
                                 <TextBlock x:Name="WarningText" FontSize="11.5" TextWrapping="Wrap" Margin="0,4,0,0"
-                                           Foreground="{StaticResource WarningBrush}" Visibility="Collapsed" />
+                                           Foreground="{DynamicResource WarningBrush}" Visibility="Collapsed" />
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -164,7 +164,7 @@
             </ScrollViewer>
 
             <!-- Footer -->
-            <Border Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0"
+            <Border Background="{DynamicResource WindowBrush}" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,1,0,0"
                     CornerRadius="0,0,12,12" Padding="24,14" Margin="0,20,0,0">
                 <Grid>
                     <Button x:Name="ResetButton" Style="{StaticResource GhostButton}" Content="Reset to defaults" HorizontalAlignment="Left"

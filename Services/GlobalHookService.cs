@@ -1,7 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 using OgConverter.Models;
 
 namespace OgConverter.Services
@@ -50,38 +52,76 @@ namespace OgConverter.Services
 
         public bool IsActive => _keyboardHookId != IntPtr.Zero;
 
+        /// <summary>
+        /// Forward mouse moves and releases only while the wheel is open. Otherwise every mouse move on the desktop
+        /// would wake the UI thread.
+        /// </summary>
+        public bool TrackMouse
+        {
+            get => Volatile.Read(ref _trackMouse);
+            set => Volatile.Write(ref _trackMouse, value);
+        }
+        private bool _trackMouse;
+
+        private Thread? _hookThread;
+        private uint _hookThreadId;
+        private Dispatcher? _ui;
+        private long _pendingMove;      // latest cursor position, packed X:Y
+        private int _moveQueued;        // 1 while a MouseMoved dispatch is waiting to run
+
+        /// <summary>
+        /// Installs the hooks on a dedicated thread with its own message loop. Low-level hooks are called on the
+        /// installing thread, so on the UI thread any busy moment (a render, a dialog opening) would stall keyboard
+        /// and mouse input for the whole desktop, and Windows silently removes hooks that are too slow.
+        /// </summary>
         public void Start()
         {
-            if (IsActive) return;
+            if (_hookThread != null) return;
 
+            _ui = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
             _keyboardProc = KeyboardHookCallback;
             _mouseProc = MouseHookCallback;
 
-            using var curProcess = Process.GetCurrentProcess();
-            using var curModule = curProcess.MainModule;
-            IntPtr moduleHandle = curModule != null ? GetModuleHandle(curModule.ModuleName) : IntPtr.Zero;
+            using var ready = new ManualResetEventSlim();
+            _hookThread = new Thread(() =>
+            {
+                _hookThreadId = GetCurrentThreadId();
+                IntPtr module = GetModuleHandle(null);
+                _keyboardHookId = SetWindowsHookEx(WH_KEYBOARD_LL, _keyboardProc, module, 0);
+                _mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, module, 0);
+                ready.Set();
 
-            _keyboardHookId = SetWindowsHookEx(WH_KEYBOARD_LL, _keyboardProc, moduleHandle, 0);
-            _mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, moduleHandle, 0);
+                while (GetMessage(out MSG msg, IntPtr.Zero, 0, 0) > 0)
+                {
+                    TranslateMessage(ref msg);
+                    DispatchMessage(ref msg);
+                }
+
+                if (_keyboardHookId != IntPtr.Zero) UnhookWindowsHookEx(_keyboardHookId);
+                if (_mouseHookId != IntPtr.Zero) UnhookWindowsHookEx(_mouseHookId);
+                _keyboardHookId = IntPtr.Zero;
+                _mouseHookId = IntPtr.Zero;
+            })
+            {
+                IsBackground = true,
+                Name = "OG Converter input hooks",
+                Priority = ThreadPriority.AboveNormal
+            };
+            _hookThread.Start();
+            ready.Wait(TimeSpan.FromSeconds(2));
         }
 
         public void Stop()
         {
-            if (_keyboardHookId != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(_keyboardHookId);
-                _keyboardHookId = IntPtr.Zero;
-            }
-
-            if (_mouseHookId != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(_mouseHookId);
-                _mouseHookId = IntPtr.Zero;
-            }
-
+            if (_hookThread == null) return;
+            PostThreadMessage(_hookThreadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+            _hookThread.Join(TimeSpan.FromSeconds(1));
+            _hookThread = null;
             _keyboardProc = null;
             _mouseProc = null;
         }
+
+        private void Post(Action action) => _ui?.BeginInvoke(DispatcherPriority.Input, action);
 
         public string ConvertKeyName { get; set; } = "Shift";
         public string ToolsKeyName { get; set; } = "Control";
@@ -107,7 +147,7 @@ namespace OgConverter.Services
                     if (vkCode == VK_ESCAPE)
                     {
                         _lastModifierVk = 0;
-                        Application.Current?.Dispatcher?.BeginInvoke(() => DismissWheelRequested?.Invoke());
+                        Post(() => DismissWheelRequested?.Invoke());
                     }
                     else if (IsConfiguredModifierKey(vkCode))
                     {
@@ -126,12 +166,10 @@ namespace OgConverter.Services
 
                             GetCursorPos(out POINT cursorPt);
                             var screenPoint = new Point(cursorPt.X, cursorPt.Y);
-                            string? activeFile = ShellSelectionService.GetActiveFile();
 
-                            Application.Current?.Dispatcher?.BeginInvoke(() =>
-                            {
-                                TriggerWheelRequested?.Invoke(mode, screenPoint, activeFile);
-                            });
+                            // The dragged file is looked up on the UI thread: that's a COM call into Explorer,
+                            // far too slow for a hook callback
+                            Post(() => TriggerWheelRequested?.Invoke(mode, screenPoint, null));
                         }
                     }
                 }
@@ -144,9 +182,9 @@ namespace OgConverter.Services
                             _lastModifierVk = 0;
                         }
 
-                        if (GetModeForVk(vkCode) is WheelMode released)
+                        if (TrackMouse && GetModeForVk(vkCode) is WheelMode released)
                         {
-                            Application.Current?.Dispatcher?.BeginInvoke(() => ShortcutReleased?.Invoke(released));
+                            Post(() => ShortcutReleased?.Invoke(released));
                         }
                     }
                 }
@@ -161,22 +199,29 @@ namespace OgConverter.Services
             {
                 if (wParam == (IntPtr)WM_MOUSEMOVE)
                 {
-                    try
+                    if (TrackMouse)
                     {
                         var hookStruct = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
-                        var pt = new Point(hookStruct.pt.X, hookStruct.pt.Y);
-                        Application.Current?.Dispatcher?.BeginInvoke(() => MouseMoved?.Invoke(pt));
+                        Interlocked.Exchange(ref _pendingMove, ((long)hookStruct.pt.X << 32) | (uint)hookStruct.pt.Y);
+                        // Coalesce: one queued dispatch carries the latest position, however many moves arrive meanwhile
+                        if (Interlocked.Exchange(ref _moveQueued, 1) == 0) Post(FlushMouseMove);
                     }
-                    catch { }
                 }
                 else if (wParam == (IntPtr)WM_LBUTTONUP)
                 {
                     _lastModifierVk = 0;
-                    Application.Current?.Dispatcher?.BeginInvoke(() => MouseReleased?.Invoke());
+                    if (TrackMouse) Post(() => MouseReleased?.Invoke());
                 }
             }
 
             return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
+        }
+
+        private void FlushMouseMove()
+        {
+            Interlocked.Exchange(ref _moveQueued, 0);
+            long packed = Interlocked.Read(ref _pendingMove);
+            MouseMoved?.Invoke(new Point((int)(packed >> 32), (int)(packed & 0xFFFFFFFF)));
         }
 
         private WheelMode? GetModeForVk(int vk)
@@ -240,8 +285,36 @@ namespace OgConverter.Services
         [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr GetModuleHandle(string? lpModuleName);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        private static extern int GetMessage(out MSG msg, IntPtr hWnd, uint min, uint max);
+
+        [DllImport("user32.dll")]
+        private static extern bool TranslateMessage(ref MSG msg);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr DispatchMessage(ref MSG msg);
+
+        [DllImport("user32.dll")]
+        private static extern bool PostThreadMessage(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
+
+        private const uint WM_QUIT = 0x0012;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MSG
+        {
+            public IntPtr hwnd;
+            public uint message;
+            public IntPtr wParam;
+            public IntPtr lParam;
+            public uint time;
+            public POINT pt;
+        }
 
         [DllImport("user32.dll")]
         public static extern short GetAsyncKeyState(int vKey);

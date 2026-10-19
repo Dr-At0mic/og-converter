@@ -1,0 +1,46 @@
+// A community template needs no code: colors, shape, motion and sounds.
+// Add it in Settings › Wheel templates › Add template… (pick this file), or drop the folder on the gallery.
+{
+  "id": "sunset",
+  "name": "Sunset",
+  "author": "OG Converter samples",
+  "description": "Warm dusk glass with coral, gold and lilac wheels.",
+  "renderer": "glass",
+
+  "wheel": {
+    "ring": "#F2291A2E",
+    "hub": "#21142A",
+    "text": "#FFF1E8",
+    "textMuted": "#D9B8B0",
+    "textFaint": "#A88A92",
+    "edge": "#33FFC9A8",
+    "divider": "#18FFFFFF",
+    "shadow": "#90100010",
+    "convert": "#FF7A59",
+    "tools": "#FFC145",
+    "actions": "#C49BFF"
+  },
+
+  "app": {
+    "base": "dark",
+    "window": "#140C18",
+    "surface": "#1D1222",
+    "surfaceRaised": "#26182C",
+    "surfaceHover": "#2F1F36",
+    "surfacePressed": "#382640",
+    "border": "#33223A",
+    "borderStrong": "#46304F",
+    "textPrimary": "#FFF1E8",
+    "textSecondary": "#D9B8B0",
+    "textTertiary": "#94767E",
+    "accent": "#FF7A59",
+    "cardRadius": 14,
+    "controlRadius": 8
+  },
+
+  "shape": { "innerRatio": 0.38, "gap": 8, "cornerRadius": 16 },
+  "motion": { "open": "bloom", "switch": "stagger", "durationMs": 340, "hoverMs": 130 },
+
+  // Pick a synthesized pack, or point tick/switch/open/select at .wav files in this folder
+  "sounds": { "pack": "glass", "volume": 0.8 }
+}

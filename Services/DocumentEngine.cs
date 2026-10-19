@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Markdig;
+using Markdig.Syntax;
 
 namespace OgConverter.Services
 {
@@ -62,7 +63,7 @@ namespace OgConverter.Services
             dstExt = dstExt.ToLowerInvariant();
             if (srcExt == dstExt) return false;
 
-            if (IsMarkdown(srcExt)) return dstExt is "html" or "docx" or "odt" or "pdf" or "rtf";
+            if (IsMarkdown(srcExt)) return dstExt is "html" or "docx" or "odt" or "pdf" or "rtf" or "txt";
 
             // PDF → editable document needs Word's PDF reflow; LibreOffice opens PDFs as drawings
             if (srcExt == "pdf") return dstExt is "docx" or "odt" or "rtf" or "doc";
@@ -98,7 +99,18 @@ namespace OgConverter.Services
             // Markdown: render to HTML first, then treat it as an HTML document
             if (IsMarkdown(srcExt))
             {
-                string html = MarkdownToHtml(await File.ReadAllTextAsync(src), Path.GetFileNameWithoutExtension(src));
+                string markdown = await File.ReadAllTextAsync(src);
+                if (dstExt == "txt")
+                {
+                    await File.WriteAllTextAsync(dst, Markdown.ToPlainText(markdown, MarkdownPipeline), new UTF8Encoding(false));
+                    return;
+                }
+
+                // Relative pictures (README screenshots) only resolve from the README's own folder; anywhere else
+                // (the temp folder, another output folder) they need absolute addresses
+                string srcDir = Path.GetDirectoryName(Path.GetFullPath(src))!;
+                bool besideSource = string.Equals(Path.GetDirectoryName(Path.GetFullPath(dst)), srcDir, StringComparison.OrdinalIgnoreCase);
+                string html = MarkdownToHtml(markdown, Path.GetFileNameWithoutExtension(src), dstExt == "html" && besideSource ? null : srcDir);
                 if (dstExt == "html")
                 {
                     await File.WriteAllTextAsync(dst, html, new UTF8Encoding(false));
@@ -109,7 +121,9 @@ namespace OgConverter.Services
                 await File.WriteAllTextAsync(tempHtml, html, new UTF8Encoding(false));
                 try
                 {
-                    await ConvertAsync(tempHtml, dst, dstExt);
+                    // A browser lays out code, tables and images like GitHub does; Word's HTML import is rougher
+                    if (dstExt == "pdf" && BrowserPdfService.IsAvailable) await BrowserPdfService.PrintAsync(tempHtml, dst);
+                    else await ConvertAsync(tempHtml, dst, dstExt);
                 }
                 finally
                 {
@@ -327,23 +341,65 @@ namespace OgConverter.Services
 
         private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder().UseAdvancedExtensions().Build();
 
-        private static string MarkdownToHtml(string markdown, string title)
+        /// <summary>
+        /// A standalone page styled like GitHub's README view. With <paramref name="resourceDir"/>, relative image
+        /// paths are made absolute (Markdown images directly, raw &lt;img&gt; tags through &lt;base&gt;).
+        /// </summary>
+        private static string MarkdownToHtml(string markdown, string title, string? resourceDir = null)
         {
-            string body = Markdown.ToHtml(markdown, MarkdownPipeline);
+            var document = Markdown.Parse(markdown, MarkdownPipeline);
+            if (resourceDir != null)
+            {
+                foreach (var link in document.Descendants<Markdig.Syntax.Inlines.LinkInline>())
+                {
+                    if (link.IsImage && link.Url is { Length: > 0 } url && !Uri.TryCreate(url, UriKind.Absolute, out _) && !url.StartsWith('#'))
+                    {
+                        try { link.Url = new Uri(Path.Combine(resourceDir, Uri.UnescapeDataString(url.Split('?', '#')[0]))).AbsoluteUri; }
+                        catch { }
+                    }
+                }
+            }
+
+            using var writer = new StringWriter();
+            var renderer = new Markdig.Renderers.HtmlRenderer(writer);
+            MarkdownPipeline.Setup(renderer);
+            renderer.Render(document);
+            string body = writer.ToString();
+
+            string baseTag = resourceDir == null ? "" : $"<base href=\"{new Uri(resourceDir.TrimEnd('\\') + "\\").AbsoluteUri}\">";
             return $$"""
                 <!DOCTYPE html>
                 <html>
                 <head>
                 <meta charset="utf-8">
+                {{baseTag}}
                 <title>{{System.Net.WebUtility.HtmlEncode(title)}}</title>
                 <style>
-                  body { font-family: "Segoe UI", Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; max-width: 46em; margin: 2em auto; color: #1f2328; }
-                  h1, h2, h3 { line-height: 1.25; }
-                  code, pre { font-family: Consolas, "Cascadia Mono", monospace; font-size: 10pt; background: #f4f5f7; }
-                  pre { padding: 0.8em; }
-                  table { border-collapse: collapse; }
-                  th, td { border: 1px solid #c9ccd1; padding: 4px 8px; }
-                  blockquote { border-left: 3px solid #c9ccd1; margin-left: 0; padding-left: 1em; color: #59636e; }
+                  @page { margin: 16mm 14mm; }
+                  body { font-family: "Segoe UI", -apple-system, Calibri, Arial, sans-serif, "Segoe UI Emoji"; font-size: 11pt; line-height: 1.55; max-width: 48em; margin: 2em auto; padding: 0 1em; color: #1f2328; }
+                  h1, h2, h3, h4 { line-height: 1.25; margin: 1.4em 0 0.6em; }
+                  h1, h2 { padding-bottom: 0.3em; border-bottom: 1px solid #d1d9e0; }
+                  a { color: #0969da; text-decoration: none; }
+                  img { max-width: 100%; }
+                  code, pre { font-family: "Cascadia Mono", Consolas, monospace; font-size: 9.5pt; }
+                  code { background: #eff1f3; padding: 0.15em 0.35em; border-radius: 4px; }
+                  pre { background: #f6f8fa; padding: 0.9em 1em; border-radius: 6px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
+                  pre code { background: none; padding: 0; }
+                  table { border-collapse: collapse; margin: 1em 0; }
+                  th, td { border: 1px solid #d1d9e0; padding: 6px 12px; }
+                  th { background: #f6f8fa; }
+                  blockquote { border-left: 4px solid #d1d9e0; margin: 1em 0; padding: 0 1em; color: #59636e; }
+                  hr { border: 0; border-top: 1px solid #d1d9e0; margin: 1.5em 0; }
+                  .task-list-item { list-style: none; }
+                  .task-list-item input { margin: 0 0.4em 0 -1.3em; }
+                  .markdown-alert { border-left: 4px solid #0969da; padding: 0.4em 1em; margin: 1em 0; color: inherit; }
+                  .markdown-alert-title { font-weight: 600; margin: 0 0 0.3em; }
+                  .markdown-alert-tip { border-color: #1a7f37; }
+                  .markdown-alert-important { border-color: #8250df; }
+                  .markdown-alert-warning { border-color: #9a6700; }
+                  .markdown-alert-caution { border-color: #d1242f; }
+                  pre, table, img, blockquote { break-inside: avoid; }
+                  h1, h2, h3, h4 { break-after: avoid; }
                 </style>
                 </head>
                 <body>

@@ -29,10 +29,14 @@ namespace OgConverter
 
         public MainWindow()
         {
+            // Theme first, so the window never shows a frame in the default colors
+            _settingsService = new SettingsService();
+            TemplateManager.Instance.Apply(_settingsService.Current.WheelTemplateId);
+            AppThemeService.Apply(TemplateManager.Instance.Current);
+
             InitializeComponent();
 
             _engine = new ConversionEngine();
-            _settingsService = new SettingsService();
             _notifyService = new NotificationService();
             _hookService = new GlobalHookService();
             _trayService = new TrayIconService();
@@ -46,6 +50,8 @@ namespace OgConverter
             SetupOverlay();
             SetupTray();
             SetupPlaygroundWheelInteraction();
+            SetupTemplates();
+            RefreshInstallState();
 
             StateChanged += (_, _) => UpdateMaximizeState();
 
@@ -72,6 +78,9 @@ namespace OgConverter
             CloseOnReleaseCheck.IsChecked = s.CloseWheelOnKeyRelease;
             _overlay.SetHoldToUse(s.CloseWheelOnKeyRelease);
             SoundService.Instance.IsEnabled = s.SoundFeedbackEnabled;
+            ShowKeyHintsCheck.IsChecked = s.ShowKeyHints;
+            ReduceMotionCheck.IsChecked = s.ReduceMotion;
+            RadialWheelCanvas.ReduceMotion = s.ReduceMotion;
 
             // Selecting items fires OnKeyMappingChanged; suppress it so half-loaded combos aren't treated as conflicts
             _suppressKeyMappingEvents = true;
@@ -83,7 +92,7 @@ namespace OgConverter
             _hookService.UpdateKeyBindings(s.ConvertKey, s.ToolsKey, s.ActionsKey);
             _overlay.UpdateKeyLabels(s.ConvertKey, s.ToolsKey, s.ActionsKey);
             EmptyHistoryKeyRun.Text = s.ConvertKey;
-            _overlay.ApplyScale(s.WheelScale);
+            _overlay.ApplyScale(s.WheelScale, s.ShowKeyHints);
             _loadingSettings = false;
         }
 
@@ -106,8 +115,8 @@ namespace OgConverter
 
             bool ok = _engine.IsFFmpegAvailable;
             FFmpegStatusText.Text = ok ? "Ready" : "Not found";
-            FFmpegStatusText.Foreground = (Brush)FindResource(ok ? "SuccessBrush" : "WarningBrush");
-            FFmpegBadge.Background = (Brush)FindResource(ok ? "SuccessSubtleBrush" : "WarningSubtleBrush");
+            FFmpegStatusText.SetResourceReference(TextBlock.ForegroundProperty, ok ? "SuccessBrush" : "WarningBrush");
+            FFmpegBadge.SetResourceReference(Border.BackgroundProperty, ok ? "SuccessSubtleBrush" : "WarningSubtleBrush");
             FFmpegPathText.Text = ok
                 ? _engine.FFmpegPath
                 : "Install FFmpeg (winget install ffmpeg) for video, audio and more image formats";
@@ -115,13 +124,16 @@ namespace OgConverter
 
             bool docs = DocumentEngine.HasAnyBackend;
             DocEngineStatusText.Text = docs ? "Ready" : "Not found";
-            DocEngineStatusText.Foreground = (Brush)FindResource(docs ? "SuccessBrush" : "WarningBrush");
-            DocEngineBadge.Background = (Brush)FindResource(docs ? "SuccessSubtleBrush" : "WarningSubtleBrush");
+            DocEngineStatusText.SetResourceReference(TextBlock.ForegroundProperty, docs ? "SuccessBrush" : "WarningBrush");
+            DocEngineBadge.SetResourceReference(Border.BackgroundProperty, docs ? "SuccessSubtleBrush" : "WarningSubtleBrush");
             DocEngineText.Text = docs ? "Using " + DocumentEngine.DescribeBackends() : DocumentEngine.LibreOfficeInstallHint;
         }
 
         private void SetupGlobalHooks()
         {
+            // Mouse traffic is only forwarded from the hook thread while the wheel is open
+            _overlay.IsVisibleChanged += (_, _) => _hookService.TrackMouse = _overlay.IsVisible;
+
             _hookService.TriggerWheelRequested += (mode, screenPt, filePath) =>
             {
                 _overlay.ShowAt(screenPt, mode, filePath);
@@ -268,6 +280,22 @@ namespace OgConverter
                     return true;
                 }
 
+                case "tool_crop":
+                {
+                    var dlg = new CropDialog(filePath, FormatRegistry.DetectCategory(filePath) == FileCategory.Video, _engine.FFmpegPath);
+                    if (dlg.ShowDialog() != true) return false;
+                    parameters = dlg.Result;
+                    return true;
+                }
+
+                case "tool_trim":
+                {
+                    var dlg = new TrimDialog(filePath, _engine.FFmpegPath);
+                    if (dlg.ShowDialog() != true) return false;
+                    parameters = dlg.Result;
+                    return true;
+                }
+
                 case "tool_pdf_split":
                 {
                     var dlg = new PdfSplitDialog(filePath);
@@ -349,21 +377,14 @@ namespace OgConverter
 
         private void OnPlaygroundDragEnter(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            if (DroppedFiles.HasPaths(e.Data))
             {
                 e.Effects = DragDropEffects.Copy;
                 e.Handled = true;
             }
         }
 
-        private void OnPlaygroundDragOver(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effects = DragDropEffects.Copy;
-                e.Handled = true;
-            }
-        }
+        private void OnPlaygroundDragOver(object sender, DragEventArgs e) => OnPlaygroundDragEnter(sender, e);
 
         private void OnPlaygroundDragLeave(object sender, DragEventArgs e)
         {
@@ -371,13 +392,10 @@ namespace OgConverter
 
         private void OnPlaygroundDrop(object sender, DragEventArgs e)
         {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            var files = DroppedFiles.GetPaths(e.Data);
+            if (files.Count > 0)
             {
-                string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files.Length > 0)
-                {
-                    LoadFileIntoPlayground(files[0]);
-                }
+                LoadFileIntoPlayground(files[0]);
                 e.Handled = true;
             }
         }
@@ -425,10 +443,13 @@ namespace OgConverter
 
         private void OnTestWheelClick(object sender, RoutedEventArgs e)
         {
-            // Center the overlay on screen for instant test
-            double cx = SystemParameters.PrimaryScreenWidth / 2.0;
-            double cy = SystemParameters.PrimaryScreenHeight / 2.0;
-            _overlay.ShowAt(new Point(cx, cy), WheelMode.Convert);
+            _overlay.ShowCentered(this, WheelMode.Convert);
+        }
+
+        /// <summary>Started with Windows: create the window (hooks and tray need its handle) without showing it.</summary>
+        public void StartHidden()
+        {
+            new System.Windows.Interop.WindowInteropHelper(this).EnsureHandle();
         }
 
         private void OnMinimizeToTrayClick(object sender, RoutedEventArgs e)
@@ -439,6 +460,7 @@ namespace OgConverter
         private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
         {
             // Clean up hooks and tray
+            _settingsService.Flush();
             _hookService.Dispose();
             _trayService.Dispose();
             _overlay.Close();
@@ -446,7 +468,7 @@ namespace OgConverter
 
         private void OnSettingChanged(object sender, RoutedEventArgs e)
         {
-            if (_settingsService == null || _loadingSettings) return;
+            if (_overlay == null || _loadingSettings) return; // still inside InitializeComponent
 
             var s = _settingsService.Current;
             s.SaveInSameDirectory = SaveSameDirRadio.IsChecked == true;
@@ -455,6 +477,13 @@ namespace OgConverter
             s.SoundFeedbackEnabled = SoundFeedbackCheck.IsChecked == true;
             s.CloseWheelOnKeyRelease = CloseOnReleaseCheck.IsChecked == true;
             _overlay.SetHoldToUse(s.CloseWheelOnKeyRelease);
+            s.ReduceMotion = ReduceMotionCheck.IsChecked == true;
+            RadialWheelCanvas.ReduceMotion = s.ReduceMotion;
+            if (s.ShowKeyHints != (ShowKeyHintsCheck.IsChecked == true))
+            {
+                s.ShowKeyHints = ShowKeyHintsCheck.IsChecked == true;
+                _overlay.ApplyScale(s.WheelScale, s.ShowKeyHints);
+            }
 
             SoundService.Instance.IsEnabled = s.SoundFeedbackEnabled;
 
@@ -468,7 +497,7 @@ namespace OgConverter
 
         private void OnWheelScaleSliderChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (_settingsService == null || WheelScaleText == null) return;
+            if (_overlay == null || WheelScaleText == null) return;
 
             double val = Math.Round(e.NewValue, 2);
             UpdateWheelScaleLabel(val);
@@ -476,7 +505,7 @@ namespace OgConverter
             _settingsService.Current.WheelScale = val;
             _settingsService.SaveSettings(_settingsService.Current);
 
-            _overlay.ApplyScale(val);
+            _overlay.ApplyScale(val, _settingsService.Current.ShowKeyHints);
         }
 
         private void UpdateWheelScaleLabel(double val)
@@ -484,8 +513,9 @@ namespace OgConverter
             if (WheelScaleText == null) return;
             string label = val switch
             {
-                <= 0.65 => "Smallest",
-                <= 0.75 => "Small",
+                <= 0.47 => "Tiny",
+                <= 0.57 => "Mini",
+                <= 0.7 => "Small",
                 <= 0.95 => "Compact",
                 <= 1.05 => "Default",
                 <= 1.15 => "Medium",
@@ -597,7 +627,7 @@ namespace OgConverter
         private void OnKeyMappingChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_suppressKeyMappingEvents) return;
-            if (_settingsService == null || ConvertKeyCombo == null || ToolsKeyCombo == null || ActionsKeyCombo == null) return;
+            if (_hookService == null || ConvertKeyCombo == null || ToolsKeyCombo == null || ActionsKeyCombo == null) return;
 
             // Resolve conflicts by swapping: the wheel that already owned the new key takes over the old key
             if (sender is ComboBox changed && e.AddedItems.Count > 0 && e.RemovedItems.Count > 0)

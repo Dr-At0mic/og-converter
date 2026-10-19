@@ -129,13 +129,14 @@ namespace OgConverter.Views
 
         private void OnFileListDragOver(object sender, DragEventArgs e)
         {
-            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Effects = DroppedFiles.HasPaths(e.Data) ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
         }
 
         private void OnFileListDrop(object sender, DragEventArgs e)
         {
-            if (e.Data.GetData(DataFormats.FileDrop) is string[] files) AddFiles(files);
+            var files = DroppedFiles.GetPaths(e.Data);
+            if (files.Count > 0) AddFiles(files);
             e.Handled = true;
         }
 

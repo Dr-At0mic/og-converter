@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Sample wheel renderer plugin. Build it, then in OG Converter choose
+    Settings › Wheel templates › Add template… and pick bin/Release/.../WheelPluginSample.dll
+    (template.json is copied next to it and imported along with it).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WheelPluginSample</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compile against the app's public API (OgConverter.Wheel); don't ship a copy of it with the plugin -->
+    <ProjectReference Include="..\..\og-converter.csproj" Private="false" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="template.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

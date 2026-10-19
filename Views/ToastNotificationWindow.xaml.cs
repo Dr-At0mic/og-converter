@@ -87,13 +87,15 @@ namespace OgConverter.Views
                     WheelMode.Tools => $"{job.Option.Title} finished",
                     _ => job.Option.Title
                 };
-                SubtitleText.Text = job.Option.Mode == WheelMode.Actions
+                SubtitleText.Text = job.Option.Mode == WheelMode.Actions || job.ResultText != null
                     ? Path.GetFileName(job.SourcePath)
                     : $"{Path.GetFileName(job.SourcePath)}  →  {Path.GetFileName(job.TargetPath)}";
 
-                string size = job.SizeComparisonText;
-                MetricsText.Text = string.IsNullOrEmpty(size) ? job.DurationText : $"{size}  ·  {job.DurationText}";
-                OpenFileBtn.Visibility = File.Exists(job.TargetPath) ? Visibility.Visible : Visibility.Collapsed;
+                string detail = job.DetailText;
+                MetricsText.Text = string.IsNullOrEmpty(detail) ? job.DurationText : $"{detail}  ·  {job.DurationText}";
+                MetricsText.ToolTip = job.ResultText;
+                // Nothing new to open when the result went to the clipboard
+                OpenFileBtn.Visibility = File.Exists(job.TargetPath) && job.ResultText == null ? Visibility.Visible : Visibility.Collapsed;
             }
             else
             {

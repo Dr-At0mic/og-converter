@@ -16,6 +16,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Samples for template authors build on their own -->
+    <Compile Remove="samples\**" />
+    <None Remove="samples\**" />
+    <Page Remove="samples\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Window/taskbar icon (pack URI) and a loose copy for the tray, which loads it at the exact DPI size -->
     <Resource Include="Assets\og-converter.ico" />
     <None Include="Assets\og-converter.ico" CopyToOutputDirectory="PreserveNewest" />
