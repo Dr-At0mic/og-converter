@@ -9,13 +9,13 @@ Drag a file anywhere in Windows, tap your configured hotkey (e.g. **Shift**), an
 
 **The wheel**: Convert, Tools and Actions, one key each.
 
-<video src="Assets/public/wheel.mp4" controls muted playsinline width="100%"></video>
+https://github.com/user-attachments/assets/b6413b80-53fb-45b8-b197-93ae7aeeaf07
 
 *Video not playing? [Open wheel.mp4](Assets/public/wheel.mp4)*
 
 **Real conversions**: dragging everyday files and converting them without leaving Explorer.
 
-<video src="Assets/public/real-convertion-vedio-sample.mp4" controls muted playsinline width="100%"></video>
+https://github.com/user-attachments/assets/22a06ab1-d5d4-4027-9332-6b280cf2b70c
 
 *Video not playing? [Open real-convertion-vedio-sample.mp4](Assets/public/real-convertion-vedio-sample.mp4)*
 
