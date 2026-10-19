@@ -23,7 +23,7 @@ namespace OgConverter.Services
     /// </summary>
     public static class CompressionService
     {
-        public const string RequiresFFmpeg = "FFmpeg is required for this. Install it (winget install Gyan.FFmpeg) or put ffmpeg.exe next to OG Converter.";
+        public const string RequiresFFmpeg = "FFmpeg is required for this. Install it (winget install Gyan.FFmpeg) or put ffmpeg.exe next to OG Converter, then restart OG Converter.";
 
         /// <summary>The pipeline a file goes through, or null when compressing it makes no sense (already-compressed archives, icons).</summary>
         public static CompressionKind? KindOf(string path)
@@ -33,12 +33,12 @@ namespace OgConverter.Services
             {
                 "gif" => CompressionKind.AnimatedGif,
                 "svg" => CompressionKind.Svg,
-                "ico" => null,
+                "ico" or "heic" or "heif" => null,
                 "jpg" or "jpeg" or "png" or "webp" or "bmp" or "tif" or "tiff" or "avif" => CompressionKind.Image,
                 "pdf" => CompressionKind.Pdf,
                 "docx" or "xlsx" or "pptx" or "ppsx" or "docm" or "xlsm" or "pptm" or "odt" or "ods" or "odp" => CompressionKind.Office,
                 "zip" or "tar" => CompressionKind.Archive,
-                "gz" or "tgz" or "7z" or "rar" or "bz2" or "xz" or "zst" or "br" => null,
+                "gz" or "tgz" or "7z" or "rar" or "bz2" or "xz" or "zst" or "br" or "cab" => null,
                 _ => FormatRegistry.DetectCategory(path) switch
                 {
                     FileCategory.Video => CompressionKind.Video,

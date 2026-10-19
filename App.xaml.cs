@@ -47,9 +47,11 @@ namespace OgConverter
                 Tests.TemplateVerification.IsolateTemplatesFolder(templateTestDir);
                 try
                 {
-                    Task.Run(async () => await Tests.VerificationRunner.RunSelfTestAsync()).GetAwaiter().GetResult();
+                    // "--test markdown,everyday" runs just those sections
+                    string[]? only = e.Args.Length > 1 ? e.Args[1].Split(',', StringSplitOptions.RemoveEmptyEntries) : null;
+                    Task.Run(async () => await Tests.VerificationRunner.RunSelfTestAsync(only)).GetAwaiter().GetResult();
                     // Renders WPF visuals, so it runs here on the UI (STA) thread
-                    Tests.TemplateVerification.Run(templateTestDir);
+                    if (only == null) Tests.TemplateVerification.Run(templateTestDir);
                 }
                 catch (Exception ex)
                 {
@@ -57,6 +59,13 @@ namespace OgConverter
                     exitCode = 1;
                 }
                 Shutdown(exitCode);
+                return;
+            }
+
+            if (e.Args.Length > 0 && e.Args[0] == "--convert")
+            {
+                // On the UI thread, like a job started from the wheel
+                Dispatcher.InvokeAsync(async () => Shutdown(await CommandLine.ConvertAsync(e.Args)));
                 return;
             }
 

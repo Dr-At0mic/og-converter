@@ -46,52 +46,69 @@ namespace OgConverter.Services
         }
 
         /// <summary>Crops an image and saves it in its own format (PNG when that format can't be written). Returns the output path.</summary>
-        public static async Task<string> CropImageAsync(string src, Int32Rect rect, string? ffmpeg, Func<string, string, string> targetFor)
+        public static Task<string> CropImageAsync(string src, Int32Rect rect, string? ffmpeg, Func<string, string, string> targetFor) =>
+            EditImageAsync(src, ffmpeg, targetFor, "_cropped",
+                bmp => new CroppedBitmap(bmp, Clamp(rect, bmp.PixelWidth, bmp.PixelHeight)),
+                // Animated GIFs have no EXIF rotation, so the coordinates are the stored pixels
+                $"crop={rect.Width}:{rect.Height}:{rect.X}:{rect.Y}");
+
+        /// <summary>Turns an image a quarter turn clockwise, in its own format. Phone photos turn from the way they're shown.</summary>
+        public static Task<string> RotateImageAsync(string src, string? ffmpeg, Func<string, string, string> targetFor) =>
+            EditImageAsync(src, ffmpeg, targetFor, "_rotated",
+                bmp => new TransformedBitmap(bmp, new RotateTransform(90)),
+                "transpose=1");
+
+        /// <summary>
+        /// Decodes the image upright, applies <paramref name="edit"/> and saves it in its own format (PNG when that format
+        /// can't be written), keeping JPEG camera details. Animated GIFs go through FFmpeg with <paramref name="gifFilter"/>
+        /// so every frame is kept.
+        /// </summary>
+        private static async Task<string> EditImageAsync(string src, string? ffmpeg, Func<string, string, string> targetFor, string suffix,
+            Func<BitmapSource, BitmapSource> edit, string gifFilter)
         {
             string ext = Path.GetExtension(src).TrimStart('.').ToLowerInvariant();
 
-            // Animated GIFs keep every frame (GIFs have no EXIF rotation, so the coordinates are the stored pixels)
             if (ext == "gif" && ffmpeg != null && await IsAnimatedGifAsync(src))
             {
-                string gif = targetFor("gif", "_cropped");
+                string gif = targetFor("gif", suffix);
                 await MediaToolkit.RunAsync(ffmpeg, new[] { "-i", src, "-vf",
-                    $"crop={rect.Width}:{rect.Height}:{rect.X}:{rect.Y},split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse", gif });
+                    $"{gifFilter},split[a][b];[a]palettegen=reserve_transparent=1[p];[b][p]paletteuse", gif });
                 return gif;
             }
 
-            // Decode, cut and encode on one thread: WPF bitmaps from a decoder belong to the thread that made them
+            // Decode, edit and encode on one thread: WPF bitmaps from a decoder belong to the thread that made them
             string? intermediate = null;
             string saved = await WithDecodedAsync<string>(src, ffmpeg, image =>
             {
-                var cropped = new CroppedBitmap(image.Bitmap, Clamp(rect, image.Bitmap.PixelWidth, image.Bitmap.PixelHeight));
-                cropped.Freeze();
+                var edited = edit(image.Bitmap);
+                edited.Freeze();
 
                 switch (ext)
                 {
                     case "jpg" or "jpeg":
                     {
                         // Camera details are kept; the orientation tag is reset since the pixels are now upright
-                        string target = targetFor(ext, "_cropped");
-                        ImageCodec.SaveJpeg(cropped, target, 95, image.Metadata);
+                        string target = targetFor(ext, suffix);
+                        ImageCodec.SaveJpeg(edited, target, 95, image.Metadata);
                         return target;
                     }
                     case "png":
                     {
-                        string target = targetFor(ext, "_cropped");
-                        ImageCodec.SavePng(cropped, target);
+                        string target = targetFor(ext, suffix);
+                        ImageCodec.SavePng(edited, target);
                         return target;
                     }
                     case "tif" or "tiff":
                     {
-                        string target = targetFor(ext, "_cropped");
-                        ImageCodec.SaveTiff(cropped, target);
+                        string target = targetFor(ext, suffix);
+                        ImageCodec.SaveTiff(edited, target);
                         return target;
                     }
                     case "bmp" or "gif":
                     {
-                        string target = targetFor(ext, "_cropped");
+                        string target = targetFor(ext, suffix);
                         BitmapEncoder encoder = ext == "bmp" ? new BmpBitmapEncoder() : new GifBitmapEncoder();
-                        encoder.Frames.Add(BitmapFrame.Create(cropped));
+                        encoder.Frames.Add(BitmapFrame.Create(edited));
                         using var fs = File.Create(target);
                         encoder.Save(fs);
                         return target;
@@ -99,7 +116,7 @@ namespace OgConverter.Services
                     default:
                         // WebP, AVIF, ICO…: Windows can't encode these, so FFmpeg re-encodes a lossless intermediate
                         intermediate = TempPng();
-                        ImageCodec.SavePng(cropped, intermediate);
+                        ImageCodec.SavePng(edited, intermediate);
                         return intermediate;
                 }
             }) ?? throw new InvalidOperationException("This image format can't be read.");
@@ -109,7 +126,7 @@ namespace OgConverter.Services
             {
                 if (ffmpeg != null)
                 {
-                    string target = targetFor(ext, "_cropped");
+                    string target = targetFor(ext, suffix);
                     try
                     {
                         string[] codec = ext switch
@@ -127,7 +144,7 @@ namespace OgConverter.Services
                     }
                 }
 
-                string png = targetFor("png", "_cropped");
+                string png = targetFor("png", suffix);
                 File.Copy(intermediate, png, true);
                 return png;
             }
@@ -220,6 +237,35 @@ namespace OgConverter.Services
             args.Add(target);
 
             await MediaToolkit.RunAsync(ffmpeg, args, length, progress);
+            return target;
+        }
+
+        /// <summary>Turns a video a quarter turn clockwise (re-encoded, so every player shows it turned). Returns the output path.</summary>
+        public static async Task<string> RotateVideoAsync(string ffmpeg, string src, int crf, Func<string, string, string> targetFor, IProgress<double>? progress)
+        {
+            string ext = Path.GetExtension(src).TrimStart('.').ToLowerInvariant();
+            // Containers whose codecs FFmpeg writes well; anything else becomes an MP4
+            if (ext is not ("mp4" or "mkv" or "mov" or "m4v" or "webm" or "avi" or "wmv")) ext = "mp4";
+            string target = targetFor(ext, "_rotated");
+            var info = await MediaToolkit.ProbeAsync(ffmpeg, src);
+
+            // FFmpeg turns phone videos upright first (their rotation flag), so the turn starts from what the viewer sees
+            var args = new List<string> { "-i", src, "-map", "0:v:0", "-map", "0:a?", "-vf", "transpose=1" };
+            args.AddRange(VideoCodecArgs(ext, crf));
+            args.AddRange(AudioCodecArgs(ext));
+            args.Add(target);
+            await MediaToolkit.RunAsync(ffmpeg, args, info.DurationSeconds, progress);
+            return target;
+        }
+
+        /// <summary>Saves the frame from the middle of a video (or <paramref name="seconds"/> in) as a PNG. Returns the output path.</summary>
+        public static async Task<string> SnapshotAsync(string ffmpeg, string src, Func<string, string, string> targetFor, double? seconds = null)
+        {
+            var info = await MediaToolkit.ProbeAsync(ffmpeg, src);
+            double at = Math.Max(0, seconds ?? info.DurationSeconds / 2);
+            string target = targetFor("png", $"_frame_{Stamp(at)}");
+            await MediaToolkit.RunAsync(ffmpeg, new[] { "-ss", Seconds(at), "-i", src, "-frames:v", "1", "-update", "1", target });
+            if (!File.Exists(target)) throw new InvalidOperationException("The video has no picture at that point.");
             return target;
         }
 

@@ -152,10 +152,18 @@ namespace OgConverter.Services
             // Archive Extraction
             if (job.Option.Id == "extract")
             {
-                string extractDir = Path.Combine(Path.GetDirectoryName(job.SourcePath)!, Path.GetFileNameWithoutExtension(job.SourcePath) + "_extracted");
-                Directory.CreateDirectory(extractDir);
-                await Task.Run(() => ZipFile.ExtractToDirectory(job.SourcePath, extractDir, true));
-                job.TargetPath = extractDir;
+                job.TargetPath = await ExtractArchiveAsync(job.SourcePath);
+                job.IsSuccess = true;
+                return;
+            }
+
+            // Archive → another archive format: unpack, then pack the contents again
+            if (FormatRegistry.DetectCategory(job.SourcePath) == FileCategory.Archive && ext is "zip" or "tar" or "gz")
+            {
+                // "backup.tar.gz" → "backup.zip"; GZ means a .tar.gz, the only way to gzip several files
+                string named = Path.Combine(Path.GetDirectoryName(job.SourcePath)!, ArchiveService.BaseName(job.SourcePath) + ".archive");
+                job.TargetPath = GetTargetFilePath(named, ext == "gz" ? "tar.gz" : ext, settings);
+                await ArchiveService.RepackAsync(job.SourcePath, job.TargetPath, ext);
                 job.IsSuccess = true;
                 return;
             }
@@ -221,6 +229,23 @@ namespace OgConverter.Services
                 return;
             }
 
+            // Web pages and Markdown → one picture of the whole page, drawn by the browser
+            if (sourceExt is "html" or "htm" or "mht" or "mhtml" or "md" or "markdown" && ext is "png" or "jpg")
+            {
+                string png = ext == "png" ? targetPath : TempFile("png");
+                try
+                {
+                    await DocumentEngine.RenderToPngAsync(job.SourcePath, png);
+                    if (ext != "png") await ConvertImageAsync(png, targetPath, ext, settings, null);
+                }
+                finally
+                {
+                    if (png != targetPath) TryDelete(png);
+                }
+                job.IsSuccess = true;
+                return;
+            }
+
             // Office documents, spreadsheets, presentations, Markdown, PDF → Word
             if (DocumentEngine.Handles(sourceExt, ext))
             {
@@ -232,13 +257,16 @@ namespace OgConverter.Services
             // Text Extraction (from PDF or text docs)
             if (ext == "txt")
             {
-                await Task.Run(() =>
+                string text = await Task.Run(() => sourceExt == "pdf"
+                    ? PdfToolsService.ExtractText(job.SourcePath)
+                    : File.ReadAllText(job.SourcePath));
+
+                // A scanned PDF is only pictures of pages: read them with OCR instead
+                if (sourceExt == "pdf" && OcrService.IsAvailable && LooksScanned(text, job.SourcePath))
                 {
-                    string text = sourceExt == "pdf"
-                        ? PdfToolsService.ExtractText(job.SourcePath)
-                        : File.ReadAllText(job.SourcePath);
-                    File.WriteAllText(targetPath, text);
-                });
+                    text = await OcrService.RecognizePdfAsync(job.SourcePath);
+                }
+                await File.WriteAllTextAsync(targetPath, text);
                 job.IsSuccess = true;
                 return;
             }
@@ -251,29 +279,115 @@ namespace OgConverter.Services
                 return;
             }
 
-            // Image to PDF (FFmpeg has no PDF muxer; embed the image with PDFsharp)
-            if (ext == "pdf" && FormatRegistry.DetectCategory(job.SourcePath) == FileCategory.Image)
+            // SVG to PDF stays vector (the browser prints it)
+            if (sourceExt == "svg" && ext == "pdf")
             {
-                await ImageToPdfAsync(job.SourcePath, targetPath);
+                if (!BrowserRenderService.IsAvailable) throw new InvalidOperationException(BrowserRenderService.MissingBrowserHint);
+                await BrowserRenderService.SvgToPdfAsync(job.SourcePath, targetPath);
                 job.IsSuccess = true;
+                return;
+            }
+
+            // SVG and HEIC: neither FFmpeg nor every Windows install reads them, so start from a PNG of the picture
+            if (NeedsRasterizing(sourceExt))
+            {
+                string png = await RasterizeAsync(job.SourcePath);
+                try
+                {
+                    if (ext == "png") File.Copy(png, targetPath, true);
+                    else await ConvertImageAsync(png, targetPath, ext, settings, null);
+                }
+                finally
+                {
+                    TryDelete(png);
+                }
+                job.IsSuccess = true;
+                return;
+            }
+
+            await ConvertImageAsync(job.SourcePath, targetPath, ext, settings, progress);
+            job.IsSuccess = true;
+        }
+
+        /// <summary>Image, audio and video conversions: PDFsharp for PDF output, FFmpeg for the rest, Windows' codecs without FFmpeg.</summary>
+        private async Task ConvertImageAsync(string input, string targetPath, string ext, AppSettings settings, IProgress<double>? progress)
+        {
+            string sourceExt = Path.GetExtension(input).ToLowerInvariant().TrimStart('.');
+
+            // Image to PDF (FFmpeg has no PDF muxer; embed the image with PDFsharp)
+            if (ext == "pdf" && FormatRegistry.DetectCategory(input) == FileCategory.Image)
+            {
+                await ImageToPdfAsync(input, targetPath);
                 return;
             }
 
             // FFmpeg conversions (Images, Audio, Video)
             if (IsFFmpegAvailable)
             {
-                await RunFFmpegAsync(job.SourcePath, BuildFFmpegArgs(job.SourcePath, targetPath, ext, settings), progress);
+                await RunFFmpegAsync(input, BuildFFmpegArgs(input, targetPath, ext, settings), progress);
                 return;
             }
 
             // Built-in .NET WPF Bitmap fallback for basic images if FFmpeg is not in PATH
-            if (TryWpfImageConvert(job.SourcePath, targetPath, ext))
+            if (TryWpfImageConvert(input, targetPath, ext)) return;
+
+            throw new InvalidOperationException($"FFmpeg is required to convert from .{sourceExt} to .{ext}. Install it (winget install Gyan.FFmpeg) or put ffmpeg.exe next to OG Converter, then restart OG Converter.");
+        }
+
+        private static bool NeedsRasterizing(string ext) => ext is "svg" or "heic" or "heif";
+
+        /// <summary>
+        /// A temporary PNG of an SVG (drawn by the browser) or a HEIC photo (Windows' HEIF codec, upright, else FFmpeg).
+        /// The caller deletes it.
+        /// </summary>
+        private async Task<string> RasterizeAsync(string src)
+        {
+            string png = TempFile("png");
+            string ext = Path.GetExtension(src).TrimStart('.').ToLowerInvariant();
+            if (ext == "svg")
             {
-                job.IsSuccess = true;
-                return;
+                if (!BrowserRenderService.IsAvailable) throw new InvalidOperationException(BrowserRenderService.MissingBrowserHint);
+                await BrowserRenderService.RenderSvgAsync(src, png);
+                return png;
             }
 
-            throw new InvalidOperationException($"FFmpeg is required to convert from .{sourceExt} to .{ext}. Please install FFmpeg or place ffmpeg.exe in PATH.");
+            bool decoded = await Task.Run(() =>
+            {
+                var image = ImageCodec.TryLoad(src, applyOrientation: true, maxDimension: 0);
+                if (image == null) return false;
+                ImageCodec.SavePng(image.Bitmap, png);
+                return true;
+            });
+            if (decoded) return png;
+
+            if (!IsFFmpegAvailable)
+            {
+                throw new InvalidOperationException("Opening HEIC photos needs the free \"HEIF Image Extensions\" from the Microsoft Store, or FFmpeg.");
+            }
+            await RunFFmpegAsync(src, new[] { "-i", src, "-frames:v", "1", "-update", "1", png }, null);
+            return png;
+        }
+
+        /// <summary>Fewer than ~20 letters per page: the pages are pictures (a scan or a photo), not text.</summary>
+        private static bool LooksScanned(string text, string pdfPath)
+        {
+            int letters = text.Count(char.IsLetterOrDigit);
+            int pages = Math.Max(1, PdfToolsService.GetPageCount(pdfPath));
+            return letters < 20 * pages;
+        }
+
+        private static string TempFile(string ext) => Path.Combine(Path.GetTempPath(), $"ogc_{Guid.NewGuid():N}.{ext}");
+
+        private static void TryDelete(string path)
+        {
+            try { File.Delete(path); } catch { }
+        }
+
+        private static async Task<string> ExtractArchiveAsync(string src)
+        {
+            string dir = Path.Combine(Path.GetDirectoryName(src)!, ArchiveService.BaseName(src) + "_extracted");
+            await ArchiveService.ExtractAsync(src, dir);
+            return dir;
         }
 
         private async Task HandleToolAsync(ConversionJob job, AppSettings settings, IProgress<double>? progress)
@@ -322,11 +436,56 @@ namespace OgConverter.Services
             // Extract Archive
             if (job.Option.Id == "tool_extract")
             {
-                string extractDir = Path.Combine(Path.GetDirectoryName(job.SourcePath)!, Path.GetFileNameWithoutExtension(job.SourcePath) + "_extracted");
-                Directory.CreateDirectory(extractDir);
-                await Task.Run(() => ZipFile.ExtractToDirectory(job.SourcePath, extractDir, true));
-                job.TargetPath = extractDir;
+                job.TargetPath = await ExtractArchiveAsync(job.SourcePath);
                 job.IsSuccess = true;
+                return;
+            }
+
+            // Extract Text: OCR, saved beside the picture and copied
+            if (job.Option.Id == "tool_ocr")
+            {
+                job.TargetFormat = "Text";
+                string picture = job.SourcePath;
+                string? temp = NeedsRasterizing(sourceExt) ? picture = await RasterizeAsync(job.SourcePath) : null;
+                string text;
+                try
+                {
+                    text = await OcrService.RecognizeFileAsync(picture);
+                }
+                finally
+                {
+                    if (temp != null) TryDelete(temp);
+                }
+                if (string.IsNullOrWhiteSpace(text)) throw new InvalidOperationException("No text was found in the picture.");
+
+                job.TargetPath = GetTargetFilePath(job.SourcePath, "txt", settings, "_text");
+                await File.WriteAllTextAsync(job.TargetPath, text);
+                RunOnSta(() => Clipboard.SetText(text));
+                job.ResultText = Summarize(text);
+                return;
+            }
+
+            // Rotate: images keep their format; videos are re-encoded
+            if (job.Option.Id == "tool_rotate")
+            {
+                Func<string, string, string> targetFor = (ext, suffix) => GetTargetFilePath(job.SourcePath, ext, settings, suffix);
+                if (FormatRegistry.DetectCategory(job.SourcePath) == FileCategory.Video)
+                {
+                    if (!IsFFmpegAvailable) throw new InvalidOperationException("FFmpeg is required to rotate videos.");
+                    job.TargetPath = await MediaEditService.RotateVideoAsync(_ffmpegPath!, job.SourcePath, settings.VideoCrf, targetFor, progress);
+                }
+                else
+                {
+                    job.TargetPath = await MediaEditService.RotateImageAsync(job.SourcePath, IsFFmpegAvailable ? _ffmpegPath : null, targetFor);
+                }
+                return;
+            }
+
+            // Snapshot: one frame of a video as a picture
+            if (job.Option.Id == "tool_snapshot")
+            {
+                if (!IsFFmpegAvailable) throw new InvalidOperationException("FFmpeg is required to read video frames.");
+                job.TargetPath = await MediaEditService.SnapshotAsync(_ffmpegPath!, job.SourcePath, (ext, suffix) => GetTargetFilePath(job.SourcePath, ext, settings, suffix));
                 return;
             }
 
@@ -595,6 +754,53 @@ namespace OgConverter.Services
                     job.IsSuccess = true;
                     break;
 
+                case "act_copy_image":
+                {
+                    string? temp = NeedsRasterizing(Path.GetExtension(job.SourcePath).TrimStart('.').ToLowerInvariant()) ? await RasterizeAsync(job.SourcePath) : null;
+                    try
+                    {
+                        string picture = temp ?? job.SourcePath;
+                        RunOnSta(() =>
+                        {
+                            var image = ImageCodec.TryLoad(picture, applyOrientation: true, maxDimension: 0)
+                                        ?? throw new InvalidOperationException("Windows can't open this picture.");
+                            // The picture for apps that paste images, and the file for apps that paste attachments (chats, mail)
+                            var data = new DataObject();
+                            data.SetImage(image.Bitmap);
+                            data.SetFileDropList(new System.Collections.Specialized.StringCollection { job.SourcePath });
+                            Clipboard.SetDataObject(data, copy: true);
+                        });
+                    }
+                    finally
+                    {
+                        if (temp != null) TryDelete(temp);
+                    }
+                    job.ResultText = "the picture";
+                    job.IsSuccess = true;
+                    break;
+                }
+
+                case "act_copy_text":
+                {
+                    string text = await File.ReadAllTextAsync(job.SourcePath);
+                    RunOnSta(() => Clipboard.SetText(text));
+                    job.ResultText = Summarize(text);
+                    job.IsSuccess = true;
+                    break;
+                }
+
+                case "act_unblock":
+                    WindowsShellService.Unblock(job.SourcePath);
+                    job.TargetFormat = "Unblocked";
+                    job.IsSuccess = true;
+                    break;
+
+                case "act_wallpaper":
+                    WindowsShellService.SetWallpaper(await SaveWallpaperCopyAsync(job.SourcePath));
+                    job.TargetFormat = "Wallpaper";
+                    job.IsSuccess = true;
+                    break;
+
                 case "act_base64":
                 {
                     string b64Path = GetTargetFilePath(job.SourcePath, "txt", settings, "_base64");
@@ -606,6 +812,52 @@ namespace OgConverter.Services
                     job.IsSuccess = true;
                     break;
                 }
+            }
+        }
+
+        /// <summary>First words of a text, on one line, for Recent activity.</summary>
+        private static string Summarize(string text)
+        {
+            string flat = string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            return flat.Length <= 120 ? flat : flat[..117] + "…";
+        }
+
+        /// <summary>
+        /// Windows reads the wallpaper file whenever it draws the desktop, so it gets its own upright JPEG/PNG copy in
+        /// the app's folder (moving or deleting the original then doesn't blank the desktop).
+        /// </summary>
+        private async Task<string> SaveWallpaperCopyAsync(string src)
+        {
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OGConverter", "Wallpaper");
+            Directory.CreateDirectory(dir);
+            foreach (string old in Directory.GetFiles(dir)) TryDelete(old);
+
+            string ext = Path.GetExtension(src).TrimStart('.').ToLowerInvariant();
+            string? temp = NeedsRasterizing(ext) ? await RasterizeAsync(src) : null;
+            try
+            {
+                string picture = temp ?? src;
+                // A new name each time: Windows ignores a "change" to the same path
+                string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                string? saved = await Task.Run(() =>
+                {
+                    var image = ImageCodec.TryLoad(picture, applyOrientation: true, maxDimension: 0);
+                    if (image == null) return null;
+                    string target = Path.Combine(dir, $"wallpaper-{stamp}.{(image.HasAlpha ? "png" : "jpg")}");
+                    if (image.HasAlpha) ImageCodec.SavePng(image.Bitmap, target);
+                    else ImageCodec.SaveJpeg(image.Bitmap, target, 95, null);
+                    return target;
+                });
+                if (saved != null) return saved;
+
+                if (!IsFFmpegAvailable) throw new InvalidOperationException("Windows can't open this picture.");
+                string png = Path.Combine(dir, $"wallpaper-{stamp}.png");
+                await RunFFmpegAsync(picture, new[] { "-i", picture, "-frames:v", "1", "-update", "1", png }, null);
+                return png;
+            }
+            finally
+            {
+                if (temp != null) TryDelete(temp);
             }
         }
 
@@ -746,6 +998,10 @@ namespace OgConverter.Services
                 "gif" => new[] { "-vf", "fps=15,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" },
 
                 "webp" => new[] { "-quality", settings.ImageQuality.ToString() },
+                // FFmpeg's default JPEG is heavily compressed (blocky text); map the quality setting to its 2 (best)–31 scale: 85 → 4
+                "jpg" or "jpeg" => new[] { "-q:v", Math.Clamp((int)Math.Round((100 - settings.ImageQuality) / 5.0) + 1, 2, 31).ToString() },
+                // Icons are at most 256 x 256
+                "ico" => new[] { "-vf", "scale='min(256,iw)':'min(256,ih)':force_original_aspect_ratio=decrease" },
                 "avif" => new[] { "-c:v", "libsvtav1", "-crf", "30" },
 
                 // Audio (also extracts the soundtrack of a video)

@@ -119,7 +119,7 @@ namespace OgConverter
             FFmpegBadge.SetResourceReference(Border.BackgroundProperty, ok ? "SuccessSubtleBrush" : "WarningSubtleBrush");
             FFmpegPathText.Text = ok
                 ? _engine.FFmpegPath
-                : "Install FFmpeg (winget install ffmpeg) for video, audio and more image formats";
+                : "Optional. Install it (winget install Gyan.FFmpeg), then restart OG Converter, for video, audio, GIF, WebP, AVIF and JPEG XL";
             FFmpegPathText.ToolTip = ok ? _engine.FFmpegPath : null;
 
             bool docs = DocumentEngine.HasAnyBackend;

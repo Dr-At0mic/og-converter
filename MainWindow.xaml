@@ -697,7 +697,7 @@
                                 <TextBlock Text="&#xE714;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="FFmpeg" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="FFmpegPathText" Text="Used for video, audio and most image formats" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                    <TextBlock x:Name="FFmpegPathText" Text="Optional. Used for video, audio, GIF, WebP, AVIF and JPEG XL" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                                 </StackPanel>
                                 <Border x:Name="FFmpegBadge" Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center" BorderThickness="0">
                                     <TextBlock x:Name="FFmpegStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
@@ -713,7 +713,7 @@
                                 <TextBlock Text="&#xE8F1;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Office documents" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="DocEngineText" Text="Word, Excel and PowerPoint formats, plus OpenDocument" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                    <TextBlock x:Name="DocEngineText" Text="Optional. Word, Excel and PowerPoint formats, plus OpenDocument" Style="{StaticResource Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <Border x:Name="DocEngineBadge" Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
                                     <TextBlock x:Name="DocEngineStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
@@ -797,7 +797,7 @@
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Native Windows app on .NET 10 and WPF" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Low-level keyboard and mouse hooks for the drag gesture" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Explorer shell automation to find the dragged file" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="FFmpeg for media, Windows PDF engine for documents" />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Uses FFmpeg, Office or LibreOffice, and Edge if they're on your PC. It never installs them." />
                                 <TextBlock Style="{StaticResource Caption}" Text="Windows today. A Linux version is on the way." />
                             </StackPanel>
                         </Border>

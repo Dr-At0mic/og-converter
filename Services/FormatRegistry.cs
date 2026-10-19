@@ -18,13 +18,13 @@ namespace OgConverter.Services
 
             return ext switch
             {
-                ".jpg" or ".jpeg" or ".png" or ".webp" or ".bmp" or ".gif" or ".tiff" or ".tif" or ".ico" or ".avif" or ".svg" => FileCategory.Image,
+                ".jpg" or ".jpeg" or ".png" or ".webp" or ".bmp" or ".gif" or ".tiff" or ".tif" or ".ico" or ".avif" or ".svg" or ".heic" or ".heif" => FileCategory.Image,
                 ".mp4" or ".mov" or ".mkv" or ".webm" or ".avi" or ".wmv" or ".flv" or ".m4v" or ".ts" => FileCategory.Video,
                 ".mp3" or ".wav" or ".flac" or ".m4a" or ".aac" or ".ogg" or ".opus" or ".wma" or ".aiff" => FileCategory.Audio,
-                ".pdf" or ".docx" or ".doc" or ".odt" or ".rtf" or ".txt" or ".md" or ".markdown" or ".html" or ".htm" or ".json" => FileCategory.Document,
+                ".pdf" or ".docx" or ".doc" or ".odt" or ".rtf" or ".txt" or ".md" or ".markdown" or ".html" or ".htm" or ".mht" or ".mhtml" or ".json" => FileCategory.Document,
                 ".xlsx" or ".xls" or ".ods" or ".csv" => FileCategory.Spreadsheet,
                 ".pptx" or ".ppt" or ".odp" or ".ppsx" => FileCategory.Presentation,
-                ".zip" or ".tar" or ".gz" or ".rar" or ".7z" or ".bz2" => FileCategory.Archive,
+                ".zip" or ".tar" or ".gz" or ".tgz" or ".rar" or ".7z" or ".bz2" or ".xz" or ".cab" => FileCategory.Archive,
                 _ => FileCategory.Other
             };
         }
@@ -132,7 +132,7 @@ namespace OgConverter.Services
                     AddIfDifferent(list, "JPG", "Render every page to JPG", "jpg", "\uE91B");
                     AddIfDifferent(list, "WEBP", "Render every page to WebP", "webp", "\uE774");
                     AddIfDifferent(list, "TIFF", "Render every page to TIFF", "tiff", "\uE91B");
-                    AddIfDifferent(list, "TXT", "Extract text in reading order", "txt", "\uE8D2");
+                    AddIfDifferent(list, "TXT", "Extract the text (scanned pages are read with OCR)", "txt", "\uE8D2");
                     break;
 
                 case FileCategory.Document when currentExt is "DOCX" or "DOC" or "ODT" or "RTF":
@@ -148,13 +148,34 @@ namespace OgConverter.Services
                 case FileCategory.Document when currentExt is "MD" or "MARKDOWN":
                     AddIfDifferent(list, "HTML", "Rendered web page", "html", "\uE774");
                     AddIfDifferent(list, "PDF", "Rendered, print-ready PDF", "pdf", "\uE8A5");
+                    if (BrowserRenderService.IsAvailable) AddIfDifferent(list, "PNG", "The whole rendered page as one picture", "png", "\uE91B");
                     AddIfDifferent(list, "DOCX", "Formatted Word document", "docx", WordGlyph);
                     AddIfDifferent(list, "ODT", "Formatted OpenDocument Text", "odt", WordGlyph);
                     AddIfDifferent(list, "RTF", "Formatted Rich Text, opens anywhere", "rtf", WordGlyph);
                     AddIfDifferent(list, "TXT", "Plain text without Markdown symbols", "txt", "");
                     break;
 
-                case FileCategory.Document when currentExt is "TXT" or "HTML" or "HTM":
+                case FileCategory.Document when currentExt is "HTML" or "HTM" or "MHT" or "MHTML":
+                    if (BrowserRenderService.IsAvailable)
+                    {
+                        AddIfDifferent(list, "PDF", "Print the page to PDF, the way your browser shows it", "pdf", "\uE8A5");
+                        AddIfDifferent(list, "PNG", "The whole page, top to bottom, as one picture", "png", "\uE91B");
+                        AddIfDifferent(list, "JPG", "The whole page as one smaller picture", "jpg", "\uE91B");
+                    }
+                    else if (currentExt is "HTML" or "HTM")
+                    {
+                        AddIfDifferent(list, "PDF", "Print-ready PDF", "pdf", "\uE8A5");
+                    }
+                    if (currentExt is "HTML" or "HTM")
+                    {
+                        AddIfDifferent(list, "DOCX", "Word document", "docx", WordGlyph);
+                        AddIfDifferent(list, "ODT", "OpenDocument Text", "odt", WordGlyph);
+                        AddIfDifferent(list, "RTF", "Rich Text Format", "rtf", WordGlyph);
+                        AddIfDifferent(list, "TXT", "Plain text (UTF-8)", "txt", "\uE8D2");
+                    }
+                    break;
+
+                case FileCategory.Document when currentExt is "TXT":
                     AddIfDifferent(list, "PDF", "Print-ready PDF", "pdf", "\uE8A5");
                     AddIfDifferent(list, "DOCX", "Word document", "docx", WordGlyph);
                     AddIfDifferent(list, "ODT", "OpenDocument Text", "odt", WordGlyph);
@@ -233,13 +254,24 @@ namespace OgConverter.Services
 
             switch (category)
             {
+                case FileCategory.Image when currentExt is "HEIC" or "HEIF":
+                    // Windows can read HEIC photos but not write them: edits go through the Convert wheel (JPG, PNG…)
+                    AddOcr(list);
+                    break;
+
+                case FileCategory.Image when currentExt == "SVG":
+                    // Vector: no pixel grid to cut or resample, and FFmpeg can't read SVG. Convert to PNG for pixel edits.
+                    AddCompress(list, filePath);
+                    break;
+
                 case FileCategory.Image:
                     AddCompress(list, filePath);
-                    // SVG is vector: there's no pixel grid to cut
-                    if (currentExt != "SVG") list.Add(new WheelItem { Id = "tool_crop", Title = "Crop", Description = "Pick the area to keep on a preview", IconGlyph = "", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_crop", Title = "Crop", Description = "Pick the area to keep on a preview", IconGlyph = "", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_resize_50", Title = "Half Size", Description = "Halve image dimensions", IconGlyph = "\uE740", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_grayscale", Title = "Grayscale", Description = "Remove color saturation", IconGlyph = "\uE790", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_strip_meta", Title = "Remove EXIF", Description = "Remove GPS and camera metadata for privacy", IconGlyph = "\uEA18", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_rotate", Title = "Rotate 90°", Description = "Turn the picture clockwise", IconGlyph = "\uE7AD", Mode = WheelMode.Tools });
+                    AddOcr(list);
                     break;
 
                 case FileCategory.Video:
@@ -249,6 +281,8 @@ namespace OgConverter.Services
                     list.Add(new WheelItem { Id = "tool_mute", Title = "Mute", Description = "Strip audio track from video", IconGlyph = "\uE74F", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_720p", Title = "720p", Description = "Scale down video to 720p HD", IconGlyph = "\uE7F4", Mode = WheelMode.Tools });
                     list.Add(new WheelItem { Id = "tool_trim_10s", Title = "First 10s", Description = "Trim first 10 seconds sample", IconGlyph = "\uE8C6", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_snapshot", Title = "Snapshot", Description = "Save the frame from the middle of the video as a PNG", IconGlyph = "\uE722", Mode = WheelMode.Tools });
+                    list.Add(new WheelItem { Id = "tool_rotate", Title = "Rotate 90°", Description = "Turn the video clockwise (sound kept)", IconGlyph = "\uE7AD", Mode = WheelMode.Tools });
                     break;
 
                 case FileCategory.Audio:
@@ -305,6 +339,12 @@ namespace OgConverter.Services
             return list;
         }
 
+        /// <summary>Extract Text: read the words in a picture (screenshots, photos of documents) with Windows OCR.</summary>
+        private static void AddOcr(List<WheelItem> list)
+        {
+            list.Add(new WheelItem { Id = "tool_ocr", Title = "Extract Text", Description = "Read the text in the picture (OCR) and copy it", IconGlyph = "\uE8D2", Mode = WheelMode.Tools });
+        }
+
         /// <summary>The Compress tool, described for this file's kind (nothing for already-compressed files).</summary>
         private static void AddCompress(List<WheelItem> list, string? filePath)
         {
@@ -327,7 +367,7 @@ namespace OgConverter.Services
 
         private static List<WheelItem> GetActionItems(string? path = null)
         {
-            return new List<WheelItem>
+            var list = new List<WheelItem>
             {
                 new WheelItem { Id = "act_copy_path", Title = "Copy Path", Description = "Copy full file path to clipboard", IconGlyph = "\uE71B", Mode = WheelMode.Actions },
                 new WheelItem { Id = "act_reveal", Title = "Show in Explorer", Description = "Select the file in File Explorer", IconGlyph = "\uE838", Mode = WheelMode.Actions },
@@ -338,6 +378,52 @@ namespace OgConverter.Services
                 new WheelItem { Id = "act_base64", Title = "Base64", Description = "Encode as Base64 text (saved and copied)", IconGlyph = "\uE943", Mode = WheelMode.Actions },
                 ProtectionItem(path),
             };
+
+            if (path == null || !File.Exists(path)) return list;
+
+            // Extras that only make sense for some files
+            if (DetectCategory(path) == FileCategory.Image && !path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase))
+            {
+                list.Add(new WheelItem { Id = "act_copy_image", Title = "Copy Image", Description = "Copy the picture itself, ready to paste into chats, mails and documents", IconGlyph = "\uE8C8", Mode = WheelMode.Actions });
+                list.Add(new WheelItem { Id = "act_wallpaper", Title = "Wallpaper", Description = "Set as the desktop background", IconGlyph = "\uE7F4", Mode = WheelMode.Actions });
+            }
+            else if (IsTextFile(path))
+            {
+                list.Add(new WheelItem { Id = "act_copy_text", Title = "Copy Text", Description = "Copy the file's contents to the clipboard", IconGlyph = "\uE8C8", Mode = WheelMode.Actions });
+            }
+            if (WindowsShellService.IsBlocked(path))
+            {
+                list.Add(new WheelItem { Id = "act_unblock", Title = "Unblock", Description = "Downloaded from the internet: remove the Windows block so it opens without warnings", IconGlyph = "\uE785", Mode = WheelMode.Actions });
+            }
+            return list;
+        }
+
+        private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".txt", ".md", ".markdown", ".json", ".csv", ".tsv", ".log", ".xml", ".yml", ".yaml", ".toml", ".ini", ".cfg", ".conf", ".env",
+            ".html", ".htm", ".css", ".scss", ".js", ".mjs", ".ts", ".tsx", ".jsx", ".cs", ".py", ".java", ".kt", ".go", ".rs", ".c", ".h",
+            ".cpp", ".hpp", ".php", ".rb", ".swift", ".dart", ".sql", ".sh", ".ps1", ".bat", ".cmd", ".gitignore", ".editorconfig", ".srt", ".vtt"
+        };
+
+        /// <summary>Plain text small enough to paste: a known text extension, or an unknown one whose start has no binary bytes.</summary>
+        public static bool IsTextFile(string path)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length > 4 * 1024 * 1024) return false;
+                if (TextExtensions.Contains(info.Extension)) return true;
+                if (DetectCategory(path) != FileCategory.Other) return false;
+
+                using var fs = info.OpenRead();
+                byte[] head = new byte[Math.Min(4096, (int)info.Length)];
+                int read = fs.Read(head, 0, head.Length);
+                return read > 0 && Array.IndexOf(head, (byte)0, 0, read) < 0;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         /// <summary>"Unlock" for files that are already password-protected, otherwise "Protect".</summary>

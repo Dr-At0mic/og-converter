@@ -122,13 +122,20 @@ namespace OgConverter.Services
                 try
                 {
                     // A browser lays out code, tables and images like GitHub does; Word's HTML import is rougher
-                    if (dstExt == "pdf" && BrowserPdfService.IsAvailable) await BrowserPdfService.PrintAsync(tempHtml, dst);
+                    if (dstExt == "pdf" && BrowserRenderService.IsAvailable) await BrowserRenderService.PrintAsync(tempHtml, dst);
                     else await ConvertAsync(tempHtml, dst, dstExt);
                 }
                 finally
                 {
                     TryDelete(tempHtml);
                 }
+                return;
+            }
+
+            // Web pages print best in a browser: their own styles, backgrounds and fonts, no Word import quirks
+            if (srcExt is "html" or "htm" or "mht" or "mhtml" && dstExt == "pdf" && BrowserRenderService.IsAvailable)
+            {
+                await BrowserRenderService.PrintAsync(src, dst);
                 return;
             }
 
@@ -178,6 +185,33 @@ namespace OgConverter.Services
             if (!File.Exists(dst))
             {
                 throw new InvalidOperationException($"The document engine finished but did not produce a .{dstExt} file.");
+            }
+        }
+
+        /// <summary>
+        /// Markdown or a web page → one tall picture of the whole rendered page (PNG). Markdown is laid out like
+        /// GitHub's README view, at its reading width.
+        /// </summary>
+        public static async Task RenderToPngAsync(string src, string pngPath)
+        {
+            if (!BrowserRenderService.IsAvailable) throw new InvalidOperationException(BrowserRenderService.MissingBrowserHint);
+            string srcExt = Path.GetExtension(src).TrimStart('.').ToLowerInvariant();
+            if (!IsMarkdown(srcExt))
+            {
+                await BrowserRenderService.ScreenshotAsync(src, pngPath);
+                return;
+            }
+
+            string html = MarkdownToHtml(await File.ReadAllTextAsync(src), Path.GetFileNameWithoutExtension(src), Path.GetDirectoryName(Path.GetFullPath(src)));
+            string tempHtml = Path.Combine(Path.GetTempPath(), $"og-converter-md-{Guid.NewGuid():N}.html");
+            await File.WriteAllTextAsync(tempHtml, html, new UTF8Encoding(false));
+            try
+            {
+                await BrowserRenderService.ScreenshotAsync(tempHtml, pngPath, width: 980);
+            }
+            finally
+            {
+                TryDelete(tempHtml);
             }
         }
 
@@ -471,14 +505,23 @@ namespace OgConverter.Services
                     restorePdfNotice = SuppressWordPdfNotice((string)word.Version);
                 }
 
+                // Linked pictures can only be embedded in a document that has a window (Word itself stays hidden)
+                bool webPage = Path.GetExtension(src).ToLowerInvariant() is ".html" or ".htm" or ".mht" or ".mhtml";
                 doc = word.Documents.Open(
                     FileName: src,
                     ConfirmConversions: false,
                     ReadOnly: true,
                     AddToRecentFiles: false,
                     PasswordDocument: "\u0001",  // fail fast on password-protected files instead of prompting
-                    Visible: false,
+                    Visible: webPage,
                     NoEncodingDialog: true);
+
+                // Pictures in web pages and Markdown arrive as links to the files on disk: embed them, or the output
+                // shows empty frames on any other PC (and Word stalls saving such a document as RTF)
+                if (webPage)
+                {
+                    EmbedLinkedPictures(doc);
+                }
 
                 // Layout uses the printer; an offline default printer makes Word stall for minutes.
                 // Switch this hidden instance to the virtual PDF printer without touching the system default.
@@ -544,6 +587,37 @@ namespace OgConverter.Services
                 {
                     try { Directory.Delete(htmlWorkDir, true); } catch { }
                 }
+            }
+        }
+
+        private static void EmbedLinkedPictures(dynamic doc)
+        {
+            foreach (dynamic collection in new[] { doc.InlineShapes, doc.Shapes })
+            {
+                int count;
+                try { count = (int)collection.Count; } catch { continue; }
+                // Breaking a link can replace the shape, so walk from the end
+                for (int i = count; i >= 1; i--)
+                {
+                    dynamic? shape = null;
+                    try
+                    {
+                        shape = collection.Item(i);
+                        dynamic? link = shape.LinkFormat;
+                        if (link == null) continue;
+                        link.SavePictureWithDocument = true;
+                        link.BreakLink();
+                    }
+                    catch
+                    {
+                        // Not a linked picture (or one Word can't read): leave it as it is
+                    }
+                    finally
+                    {
+                        Release(shape);
+                    }
+                }
+                Release(collection);
             }
         }
 

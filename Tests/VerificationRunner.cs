@@ -10,7 +10,8 @@ namespace OgConverter.Tests
 {
     public static class VerificationRunner
     {
-        public static async Task RunSelfTestAsync()
+        /// <param name="only">Section names to run on their own (e.g. "markdown", "everyday"); null runs everything.</param>
+        public static async Task RunSelfTestAsync(string[]? only = null)
         {
             Console.WriteLine("=== OG CONVERTER ENGINE VERIFICATION TEST ===");
 
@@ -23,6 +24,16 @@ namespace OgConverter.Tests
                 string testPng = Path.Combine(tempDir, "test_input.png");
                 CreateDummyImage(testPng);
                 Console.WriteLine($"[1] Created sample image: {testPng} ({new FileInfo(testPng).Length} bytes)");
+
+                if (only is { Length: > 0 })
+                {
+                    var quick = new ConversionEngine();
+                    var quickSettings = new AppSettings { SaveInSameDirectory = true };
+                    if (Array.IndexOf(only, "markdown") >= 0) await MarkdownVerification.RunAsync(quick, quickSettings, tempDir, testPng);
+                    if (Array.IndexOf(only, "everyday") >= 0) await EverydayVerification.RunAsync(quick, quickSettings, tempDir);
+                    Console.WriteLine("=== SELECTED VERIFICATION TESTS PASSED ===");
+                    return;
+                }
 
                 // 2. Test FormatRegistry detection
                 var cat = FormatRegistry.DetectCategory(testPng);
@@ -200,6 +211,7 @@ namespace OgConverter.Tests
                 await EditVerification.RunAsync(engine, settings, tempDir, testPng);
                 DragDropVerification.Run(tempDir);
                 await MarkdownVerification.RunAsync(engine, settings, tempDir, testPng);
+                await EverydayVerification.RunAsync(engine, settings, tempDir);
 
                 Console.WriteLine("=== ALL VERIFICATION TESTS PASSED SUCCESSFULLY ===");
             }

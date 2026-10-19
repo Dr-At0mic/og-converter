@@ -55,7 +55,7 @@ namespace OgConverter.Tests
                             using var pdf = UglyToad.PdfPig.PdfDocument.Open(job.TargetPath);
                             int images = pdf.GetPages().Sum(p => p.GetImages().Count());
                             string text = string.Join(" ", pdf.GetPages().Select(p => p.Text));
-                            detail = $"{pdf.NumberOfPages} page(s), {images} picture(s), via {(BrowserPdfService.IsAvailable ? "browser" : "Office")}";
+                            detail = $"{pdf.NumberOfPages} page(s), {images} picture(s), via {(BrowserRenderService.IsAvailable ? "browser" : "Office")}";
                             if (images < 2 || !text.Contains("My Project")) throw new Exception($"README PDF is missing pictures or text ({detail})");
                             break;
                         }
@@ -72,6 +72,18 @@ namespace OgConverter.Tests
                             string html = File.ReadAllText(job.TargetPath);
                             detail = "relative pictures kept";
                             if (html.Contains("file:///") || !html.Contains("docs/img/screen%20shot.png")) throw new Exception("HTML beside the README should keep relative paths");
+                            break;
+                        }
+                        case "docx":
+                        {
+                            // Pictures must travel inside the document, not as links to this PC's files
+                            using var zip = System.IO.Compression.ZipFile.OpenRead(job.TargetPath);
+                            int media = zip.Entries.Count(e => e.FullName.StartsWith("word/media/"));
+                            string rels = new StreamReader(zip.GetEntry("word/_rels/document.xml.rels")!.Open()).ReadToEnd();
+                            bool linked = rels.Contains("relationships/image\" Target=\"file:", StringComparison.OrdinalIgnoreCase) ||
+                                          System.Text.RegularExpressions.Regex.IsMatch(rels, "relationships/image\"[^>]*TargetMode=\"External\"");
+                            detail = $"{new FileInfo(job.TargetPath).Length / 1024} KB, {media} embedded picture(s)";
+                            if (media < 1 || linked) throw new Exception($"README DOCX pictures aren't embedded ({detail}, linked={linked})");
                             break;
                         }
                         default:
