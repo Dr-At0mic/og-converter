@@ -37,7 +37,7 @@ namespace OgConverter
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 // TODO(merge): the engine branch registers Platform/Linux/AvaloniaUiDispatcher in LinuxPlatform.Register();
-                // until then Core's settings timer ticks on the thread pool, which SettingsService tolerates.
+                // until then Core's settings-save timer ticks on a thread-pool thread, so a save can race a settings change.
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 string[] args = desktop.Args ?? Array.Empty<string>();
 
