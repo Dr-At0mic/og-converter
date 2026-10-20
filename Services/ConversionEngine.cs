@@ -25,6 +25,9 @@ namespace OgConverter.Services
         /// <summary>Wheel id of the Compress tool, for every file kind.</summary>
         public const string CompressToolId = "tool_compress";
 
+        /// <summary>Looks for FFmpeg again, e.g. after installing it from Settings.</summary>
+        public void RefreshFFmpeg() => _ffmpegPath = FindFFmpeg();
+
         public bool IsFFmpegAvailable => !string.IsNullOrEmpty(_ffmpegPath) && File.Exists(_ffmpegPath);
         public string? FFmpegPath => _ffmpegPath;
 
@@ -55,6 +58,7 @@ namespace OgConverter.Services
             string[] commonPaths =
             {
                 Path.Combine(localAppData, "Microsoft", "WinGet", "Links", "ffmpeg.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WinGet", "Links", "ffmpeg.exe"), // winget run as admin
                 @"C:\ffmpeg\bin\ffmpeg.exe",
                 @"C:\Program Files\ffmpeg\bin\ffmpeg.exe"
             };
@@ -104,7 +108,7 @@ namespace OgConverter.Services
                         await HandleToolAsync(job, settings, progress);
                         break;
                     case WheelMode.Actions:
-                        await HandleActionAsync(job, settings);
+                        await HandleActionAsync(job, settings, progress);
                         break;
                 }
             }
@@ -684,7 +688,7 @@ namespace OgConverter.Services
             return text.Length <= 40 ? text : $"{ranges[0].Start}-{ranges[^1].End}_selection";
         }
 
-        private async Task HandleActionAsync(ConversionJob job, AppSettings settings)
+        private async Task HandleActionAsync(ConversionJob job, AppSettings settings, IProgress<double>? progress)
         {
             job.TargetPath = job.SourcePath;
             job.TargetFormat = job.Option.Title;
@@ -722,24 +726,13 @@ namespace OgConverter.Services
 
                 case "act_zip":
                 {
-                    bool isFolder = Directory.Exists(job.SourcePath);
-                    string source = job.SourcePath.TrimEnd('\\', '/');
-                    // Dummy extension so a folder named "my.project" becomes "my.project.zip", not "my.zip"
-                    string zipPath = GetTargetFilePath(isFolder ? source + ".folder" : source, "zip", settings);
-                    await Task.Run(() =>
-                    {
-                        if (File.Exists(zipPath)) File.Delete(zipPath);
-                        if (isFolder)
-                        {
-                            ZipFile.CreateFromDirectory(source, zipPath, CompressionLevel.Optimal, includeBaseDirectory: true);
-                        }
-                        else
-                        {
-                            using var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
-                            archive.CreateEntryFromFile(source, Path.GetFileName(source), CompressionLevel.Optimal);
-                        }
-                    });
-                    job.TargetPath = zipPath;
+                    // Archive: any format the dialog offers (plain ZIP when called without choices, e.g. from the CLI)
+                    var options = job.Parameters?.Archive ?? new ArchiveOptions();
+                    var format = ArchiveWriter.Find(options.Format);
+                    string archivePath = GetTargetFilePath(ArchiveWriter.NamingPath(job.SourcePath, format), format.Key, settings);
+                    job.TargetFormat = format.Title;
+                    await ArchiveWriter.CreateAsync(job.SourcePath, archivePath, options, progress);
+                    job.TargetPath = archivePath;
                     job.IsSuccess = true;
                     break;
                 }

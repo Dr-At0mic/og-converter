@@ -1,6 +1,6 @@
 # Builds the self-contained Windows .exe and publishes it to GitHub Releases.
 #
-# Release by pushing a version tag:
+# Release by adding a "## [1.0.0]" section to CHANGELOG.md (what changed; shown in the app's updater), then pushing a version tag:
 #   git tag v1.0.0
 #   git push origin v1.0.0
 #
@@ -39,6 +39,33 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
 
+      # "What's new" comes from this version's section in CHANGELOG.md; the app shows it before updating.
+      - name: Read release notes from CHANGELOG.md
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $lines = Get-Content CHANGELOG.md -Encoding utf8
+          $start = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^##\s+\[?v?$([regex]::Escape($version))\]?(\s|$)") { $start = $i + 1; break }
+          }
+          if ($start -lt 0) { throw "CHANGELOG.md has no '## [$version]' section. Add what changed in this version, then tag again." }
+          $end = $lines.Count
+          for ($i = $start; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^##\s') { $end = $i; break } }
+          $notes = if ($end -gt $start) { ($lines[$start..($end - 1)] -join "`n").Trim() } else { "" }
+          if (-not $notes) { throw "The '## [$version]' section in CHANGELOG.md is empty." }
+          $tag = "${{ steps.version.outputs.tag }}"
+          @(
+            "## OG Converter $tag (Windows x64)", "",
+            "Download **og-converter-$tag-win-x64.exe** and run it; no install or .NET runtime needed. Already installed? Use **Settings > System > Check for updates**.", "",
+            "## What's new", "", $notes, "",
+            "## Requirements", "",
+            "- Requires Windows 10 (1809) or later. Linux support is coming soon.",
+            "- Media features (video, audio, GIF, WebP/AVIF/JPEG XL) need FFmpeg: ``winget install Gyan.FFmpeg``",
+            "- Verify the download with the ``.sha256`` file: ``Get-FileHash <file> -Algorithm SHA256``", "",
+            "Found a bug or hit a problem? Please open an issue."
+          ) -join "`n" | Out-File -Encoding utf8 release-notes.md
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
@@ -72,17 +99,8 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag }}
           name: OG Converter ${{ steps.version.outputs.tag }}
           target_commitish: ${{ github.sha }}
-          generate_release_notes: true
-          body: |
-            ## OG Converter ${{ steps.version.outputs.tag }} (Windows x64)
-
-            Download **og-converter-${{ steps.version.outputs.tag }}-win-x64.exe** and run it; no install or .NET runtime needed.
-
-            - Requires Windows 10 (1809) or later. Linux support is coming soon.
-            - Media features (video, audio, GIF, WebP/AVIF/JPEG XL) need FFmpeg: `winget install Gyan.FFmpeg`
-            - Verify the download with the `.sha256` file: `Get-FileHash <file> -Algorithm SHA256`
-
-            Found a bug or hit a problem? Please open an issue.
+          generate_release_notes: true # appends merged PRs and the full commit range below our notes
+          body_path: release-notes.md
           files: |
             ${{ steps.assets.outputs.exe }}
             ${{ steps.assets.outputs.sha }}

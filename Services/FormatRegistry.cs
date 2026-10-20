@@ -24,7 +24,8 @@ namespace OgConverter.Services
                 ".pdf" or ".docx" or ".doc" or ".odt" or ".rtf" or ".txt" or ".md" or ".markdown" or ".html" or ".htm" or ".mht" or ".mhtml" or ".json" => FileCategory.Document,
                 ".xlsx" or ".xls" or ".ods" or ".csv" => FileCategory.Spreadsheet,
                 ".pptx" or ".ppt" or ".odp" or ".ppsx" => FileCategory.Presentation,
-                ".zip" or ".tar" or ".gz" or ".tgz" or ".rar" or ".7z" or ".bz2" or ".xz" or ".cab" => FileCategory.Archive,
+                ".zip" or ".tar" or ".gz" or ".tgz" or ".rar" or ".7z" or ".bz2" or ".xz" or ".cab" or ".zst" or ".tzst" or ".lz4" or ".lz"
+                    or ".br" or ".txz" or ".tbz2" or ".cpio" or ".iso" or ".ar" => FileCategory.Archive,
                 _ => FileCategory.Other
             };
         }
@@ -374,7 +375,7 @@ namespace OgConverter.Services
                 new WheelItem { Id = "act_terminal", Title = "Terminal", Description = "Open a terminal in this folder", IconGlyph = "\uE756", Mode = WheelMode.Actions },
                 new WheelItem { Id = "act_sha256", Title = "SHA-256", Description = "Compute the SHA-256 checksum and copy it", IconGlyph = "\uE8D7", Mode = WheelMode.Actions },
                 new WheelItem { Id = "act_copy_file", Title = "Duplicate", Description = "Create an instant copy next to the original", IconGlyph = "\uE8C8", Mode = WheelMode.Actions },
-                new WheelItem { Id = "act_zip", Title = "Zip", Description = "Compress into a .zip next to the original", IconGlyph = "\uE7B8", Mode = WheelMode.Actions },
+                new WheelItem { Id = "act_zip", Title = "Archive", Description = "Pack into ZIP, 7z, RAR, tar.gz, tar.zst, ISO… with your choice of compression and an optional password", IconGlyph = "\uE7B8", Mode = WheelMode.Actions },
                 new WheelItem { Id = "act_base64", Title = "Base64", Description = "Encode as Base64 text (saved and copied)", IconGlyph = "\uE943", Mode = WheelMode.Actions },
                 ProtectionItem(path),
             };
@@ -435,7 +436,7 @@ namespace OgConverter.Services
                 string what = kind switch
                 {
                     ProtectionService.LockKind.Vault => "Decrypt and restore the original file",
-                    ProtectionService.LockKind.Zip => "Extract the password-protected archive",
+                    ProtectionService.LockKind.Zip or ProtectionService.LockKind.SevenZipOrRar => "Extract the password-protected archive",
                     _ => "Remove the password (you need to know it)"
                 };
                 return new WheelItem { Id = "act_unlock", Title = "Unlock", Description = what, IconGlyph = "\uE785", Mode = WheelMode.Actions };

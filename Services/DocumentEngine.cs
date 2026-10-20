@@ -36,12 +36,15 @@ namespace OgConverter.Services
         private static readonly Lazy<bool> WordInstalled = new(() => ProgIdExists("Word.Application"));
         private static readonly Lazy<bool> ExcelInstalled = new(() => ProgIdExists("Excel.Application"));
         private static readonly Lazy<bool> PowerPointInstalled = new(() => ProgIdExists("PowerPoint.Application"));
-        private static readonly Lazy<string?> LibreOffice = new(FindLibreOffice);
+        private static Lazy<string?> LibreOffice = new(FindLibreOffice);
 
         public static bool HasWord => WordInstalled.Value;
         public static bool HasExcel => ExcelInstalled.Value;
         public static bool HasPowerPoint => PowerPointInstalled.Value;
         public static string? LibreOfficePath => LibreOffice.Value;
+        /// <summary>Looks for LibreOffice again, e.g. after installing it from Settings.</summary>
+        public static void RefreshLibreOffice() => LibreOffice = new(FindLibreOffice);
+
         public static bool HasAnyBackend => HasWord || HasExcel || HasPowerPoint || LibreOfficePath != null;
 
         private static readonly HashSet<string> TextOutputs = new() { "docx", "doc", "odt", "rtf", "pdf", "txt", "html" };

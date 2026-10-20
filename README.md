@@ -37,14 +37,15 @@ https://github.com/user-attachments/assets/22a06ab1-d5d4-4027-9332-6b280cf2b70c
 - **Three wheels, rebindable keys** (**Shift**, **Ctrl**, **Alt**, **Win**, **Space**):
   - `⇧ Shift`: **Convert**: images (incl. iPhone **HEIC** and **SVG**), video, audio, PDF, Word/Excel/PowerPoint, OpenDocument, Markdown/README, **web pages (HTML → PDF or a full-page picture)**, archives (ZIP, 7z, RAR, TAR, GZ…).
   - `Ctrl`: **Tools**: Compress, **Crop** (images & video, on a live preview), **Trim** (video, start to end), **Rotate**, **Extract Text (OCR)**, video **Snapshot**, resize, grayscale, remove EXIF, mute, 720p, PDF split/merge/rotate/protect, and more.
-  - `Alt`: **Actions**: Copy Path, Show in Explorer, Terminal, SHA-256, Duplicate, Zip, Base64, Protect/Unlock, plus **Copy Image** / **Wallpaper** for pictures, **Copy Text** for text and code files, and **Unblock** for downloaded files. Work on folders too.
+  - `Alt`: **Actions**: Copy Path, Show in Explorer, Terminal, SHA-256, Duplicate, **Archive** (ZIP, 7z, RAR, tar.gz, tar.zst, ISO…), Base64, Protect/Unlock, plus **Copy Image** / **Wallpaper** for pictures, **Copy Text** for text and code files, and **Unblock** for downloaded files. Work on folders too.
   - `Esc`: cancel the wheel at any time.
-- **Lossless & lossy compression for every file type** (see below).
+- **Lossless & lossy compression for every file type** (see below), including Google's **Guetzli** for smaller JPEGs.
+- **Archive in 20+ formats**: ZIP, 7z, RAR, TAR, tar.gz/bz2/xz/zst/lz4/lz/br, single-file gz/bz2/xz/zst/lz4/lz/br, cpio, ISO and ar, each with its own settings (level, method, solid, multi-core, zstd long-range, Brotli window, RAR recovery record) and an optional password (see [Archive](#archive-actions--archive)).
 - **Crop & Trim** with a preview window: draw the area to keep (free or locked to 1:1, 4:3, 16:9, 9:16…), or pick a video's start and end on a timeline with the first and last frames shown (see below).
 - **README → PDF, PNG, Word, HTML, RTF or plain text**, with the screenshots it links to and GitHub-style layout.
 - **Web pages → PDF or one full-page PNG/JPG** (saved `.html` and `.mht` pages), drawn by Edge exactly as on screen.
 - **Extract Text (OCR)** from screenshots, photos of documents and scanned PDFs, with the OCR engine built into Windows. Copied, ready to paste.
-- **Password protection**: PDF (AES-256), Office (Agile AES-256), encrypted `.ogx` files (AES-256-GCM / ChaCha20-Poly1305 + Argon2id), password ZIPs.
+- **Password protection**: PDF (AES-256), Office (Agile AES-256), encrypted `.ogx` files (AES-256-GCM / ChaCha20-Poly1305 + Argon2id), password-protected ZIP, 7z and RAR archives (7z/RAR can hide the file names too).
 - **Wheel templates**: OG Classic, macOS-style **Aqua** and **Graphite**, Dock-style **Orbit** and synthwave **Neon Night**, each with its own shapes, animations and sounds. The whole app re-themes to match. Make your own with a `template.json` or a renderer plugin: see [docs/TEMPLATES.md](docs/TEMPLATES.md).
 - **Settings**: output folder, wheel size (40–135%), close-on-key-release, sound feedback, overwrite behaviour, toasts, shortcut hint bar, reduce motion (see [Settings](#️-settings)).
 - **Run portable or install**: the exe runs as-is; **Settings › System › Install** (or the banner on Home) installs it per-user (no admin), adds it to Start and Windows Settings › Apps, and can **start it with Windows** straight to the tray.
@@ -70,13 +71,13 @@ Edit or optimize the file. For a PDF: Compress, Split / Extract, Merge, Rotate, 
 ![Tools wheel (Ctrl) on a PDF](Assets/public/og-short-cut-tools.png)
 
 ### `Alt`: Actions
-Quick file actions: Copy Path, Show in Explorer, Terminal, SHA-256, Duplicate, Zip, Base64, Protect. SHA-256 copies the checksum to the clipboard and shows it in Recent activity (hover for the full value).
+Quick file actions: Copy Path, Show in Explorer, Terminal, SHA-256, Duplicate, Archive, Base64, Protect. SHA-256 copies the checksum to the clipboard and shows it in Recent activity (hover for the full value).
 
 ![Actions wheel (Alt) on a PDF](Assets/public/og-short-cut-actions.png)
 
 Press `Esc` at any time to close the wheel.
 
-The bar under the wheel lists these keys. It shrinks with the wheel, and you can hide it in **Settings › Advanced › Shortcut hints under the wheel** once you know them.
+The bar under the wheel lists these keys. It shrinks with the wheel. It is hidden by default; turn it on in **Settings › Advanced › Shortcut hints under the wheel** while you learn the keys.
 
 ---
 
@@ -96,13 +97,52 @@ Drag any file, open the **Tools** wheel (`Ctrl`), choose **Compress**. A dialog 
 | **PDF** | Streams re-compressed at max, uncompressed fonts/content deflated, thumbnails and unused objects removed | Images downsampled to a DPI (Screen 72 / eBook 150 / Print 300) and re-encoded, optional grayscale |
 | **Word / Excel / PowerPoint, ODT / ODS / ODP** | Package re-zipped at max, PNG pictures optimized | Pictures resized like Office's *Compress Pictures* (Email 96 / Web 150 / Print 220 / HD 330 ppi) |
 | **ZIP / TAR** | ZIP re-packed at maximum; TAR → `.tar.gz` / `.tar.br` | n/a |
-| **Everything else** (text, logs, CSV, JSON…) | ZIP, GZip, **Brotli**; JSON minify | n/a |
+| **Everything else** (text, logs, CSV, JSON…) | ZIP, GZip, **Brotli**; JSON minify (more formats: Actions › **Archive**) | n/a |
 
 **Presets** include *Discord 10 MB*, *WhatsApp 16 MB* and *Email 25 MB* for video, *Voice/podcast* for audio, and the classic PDF and Office resolution presets. Long jobs show a progress toast.
 
 Notes:
 - WebP, AVIF, JPEG XL, palette PNG, GIF, video and audio need **FFmpeg** (the full build includes every encoder used). JPEG, PNG-lossless, TIFF, PDF, Office and archive compression work without it.
 - JPEG XL and AVIF give the smallest images but aren't supported by every app yet; the dialog tells you when that matters.
+- **Guetzli** (Google's JPEG encoder) is offered as an output format: JPEGs 20–30% smaller that open everywhere. It's slow and memory-hungry (about 25 s and 250 MB per megapixel), so the dialog shows this PC's CPU and free memory, what the picture needs and how long it takes. A picture bigger than the free memory needs a smaller **Longest edge** or **Do it anyway**. The dialog downloads Guetzli (0.6 MB) when you first pick it.
+
+### Archive (Actions › Archive)
+
+Packs a file or folder in the format you pick, with that format's own settings. An optional password goes under **Advanced**.
+
+| Format | Settings | Notes |
+|---|---|---|
+| **ZIP** | Level 0–9, Deflate or Store; AES-256 or ZipCrypto password | Opens everywhere |
+| **7z** | Level 0–9; LZMA2, LZMA, PPMd, BZip2, Deflate or Store; solid; all cores; AES-256 password, file names hidden | Built in through Windows' `tar.exe`; **7-Zip** is used when installed and is needed for 7z passwords |
+| **RAR** | Level 0–5, solid, recovery record (1–10%), all cores; AES-256 password, file names hidden | Needs **WinRAR** (shareware) to create |
+| **TAR**, **tar.gz**, **tar.bz2**, **tar.xz**, **tar.zst**, **tar.lz4**, **tar.lz**, **tar.br** | Each codec's own levels (zstd 1–22 with long-range matching, Brotli 0–11 with window size, xz/zstd on all cores…) | Keep folders and dates for Linux and macOS |
+| **gz**, **bz2**, **xz**, **zst**, **lz4**, **lz**, **br** | Same levels, for one file (`report.pdf` → `report.pdf.zst`) | |
+| **cpio**, **ISO** (ISO 9660 + Joliet), **ar** | n/a | ISO images mount in Windows with a double-click |
+
+- **Quick picks**: chips for ZIP, 7z, tar.gz, tar.zst, tar.xz and RAR; every format is in the list below them. Folders only see formats that can hold a folder.
+- **Password (Advanced)**: ZIP (AES-256 or ZipCrypto), 7z and RAR (AES-256, optionally hiding the file names). Formats that can't
+  hold a password say so. The password is never saved; the other choices are remembered for next time.
+- **Pictures inside**: packed unchanged, optimized losslessly (JPEG metadata removed, PNGs re-encoded), or re-encoded with **Guetzli**
+  (20–30% smaller JPEGs, no visible difference). Pictures are re-encoded in a temporary copy, so your originals don't change.
+- **Guetzli resources panel**, like LM Studio's model settings: this PC's CPU, threads and free memory, a memory bar
+  (green / amber / red), the estimated time, and **Parallel jobs** (Auto, 1, 2, 4…, one CPU core each), each choice showing
+  its time and memory. Auto runs as many as the free memory allows. Pictures bigger than the free memory are packed unchanged
+  unless you tick **Do it anyway** (Windows then uses the page file, which is slower). No admin rights are needed: Windows gives
+  apps all the memory it has. One picture always uses one core; parallel jobs speed up folders of photos.
+- **Progress**: long jobs show progress in Recent activity and a toast. Quitting OG Converter stops any Guetzli, 7-Zip or WinRAR still running.
+- **Helpers**: when a choice needs 7-Zip, WinRAR or Guetzli, the dialog shows an **Install** / **Download** button for it.
+- Every format can be extracted again from the Convert wheel (**Extract**).
+
+### Password-protected archives (Actions › Protect)
+
+For any file or folder, **Protect › Password-protected archive** makes a ZIP, 7z or RAR with:
+
+- **Archive format**: ZIP (opens everywhere), 7z (AES-256, usually the smallest) or RAR (AES-256, made with WinRAR).
+- **Encryption** for ZIP: AES-256 (recommended) or ZipCrypto (opens in Windows Explorer, but weak).
+- **Encrypt file names too** for 7z and RAR, so not even the list of contents is visible without the password.
+- **Compression**: Store, Normal or Maximum.
+
+**Unlock** (Actions wheel) opens password-protected ZIP, 7z and RAR files, checks the password, and extracts them next to the original.
 
 ---
 
@@ -152,13 +192,13 @@ Pictures on the internet (build badges) are waited for up to 20 seconds; on an o
 | **Scanned PDF** | Convert › TXT | Pages that are only pictures are read with OCR automatically |
 | **Picture / video** | Tools › **Rotate 90°** | Turned clockwise. Photos keep their format and camera details; videos keep their sound |
 | **Video** | Tools › **Snapshot** | The frame from the middle of the video as a PNG |
-| **Archive** (ZIP, 7z, RAR, TAR, TAR.GZ, GZ, BZ2, XZ, CAB) | Convert | **Extract**, or re-pack as ZIP, TAR or TAR.GZ |
+| **Archive** (ZIP, 7z, RAR, TAR, TAR.GZ/BZ2/XZ/ZST/LZ4/LZ/BR, GZ, BZ2, XZ, ZST, LZ4, LZ, BR, CPIO, ISO, CAB) | Convert | **Extract**, or re-pack as ZIP, TAR or TAR.GZ |
 | **Picture** | Actions › **Copy Image** | The picture on the clipboard: paste it straight into WhatsApp, Teams, mail or Word |
 | **Picture** | Actions › **Wallpaper** | Sets it as the desktop background |
 | **Text or code file** | Actions › **Copy Text** | The whole file's contents on the clipboard |
 | **Downloaded file** | Actions › **Unblock** | Removes Windows' "came from the internet" block (Protected View, SmartScreen warnings, blocked macros), like *Properties › Unblock*. Only shown for blocked files |
 
-OCR reads the languages installed in Windows (**Settings › Time & language › Language & region**). 7z/RAR/XZ/CAB use the `tar.exe` built into Windows 10 1803+; password-protected 7z/RAR archives need 7-Zip or WinRAR.
+OCR reads the languages installed in Windows (**Settings › Time & language › Language & region**). 7z and RAR (including password-protected ones, through **Unlock**) are read in-process; CPIO, ISO and CAB use the `tar.exe` built into Windows 10 1803+.
 
 ---
 
@@ -203,9 +243,10 @@ Open the dashboard from the tray or taskbar and pick **Settings**. Changes are s
 | **Notifications** | Show a notification when done | A small card in the corner with **Open** and the result size |
 | **System** | Install / Uninstall | Per-user install, no admin rights (see [Install, start with Windows, uninstall](#install-start-with-windows-uninstall)) |
 | | Start with Windows | Opens quietly in the tray when you sign in |
-| **Advanced** | Shortcut hints under the wheel | Hide the `Shift · Ctrl · Alt · Esc` bar once you know the keys |
+| | Check for updates | Finds the latest release, shows what's new, then downloads, verifies and restarts. Only contacts GitHub when you click |
+| **Advanced** | Shortcut hints under the wheel | Show the `Shift · Ctrl · Alt · Esc` bar under the wheel (off by default) |
 | | Reduce motion | Show the wheel instantly, without open, switch and hover animations |
-| **Engine** | FFmpeg, Office documents, PDF | Shows **Ready** or **Not found** for each engine, and which path or app it uses |
+| **Engine** | FFmpeg, Office documents, Browser, PDF | Shows **Ready** or **Not found** for each engine and which path or app it uses, with **Install** buttons for FFmpeg and LibreOffice |
 
 The shortcut keys themselves are rebound on the **Home** screen.
 
@@ -237,8 +278,10 @@ It runs portable; to install it, see [Install, start with Windows, uninstall](#i
 ### Requirements
 **To use the app:** Windows 10 (1809) or later. That's all: the exe starts and converts PDFs, JPEG/PNG/TIFF/BMP, text, Markdown and archives on its own.
 
-The tools below are **optional**. OG Converter **never downloads or installs anything**: it looks for each tool on your PC and, when one is missing,
-leaves out the options that need it or shows a hint telling you what to install.
+The tools below are **optional**. OG Converter looks for each tool on your PC and, when one is missing, leaves out the options that need it
+or shows a hint telling you what to install. It **never installs anything on its own**: on first start (and right after **Install**) it offers
+to install a missing FFmpeg, and LibreOffice when neither Microsoft Office nor LibreOffice is found, through winget, only if you click Install.
+The same **Install** buttons are in **Settings › Engine**. The browser is only reported there.
 
 | Optional tool | Unlocks | If it's missing |
 |---|---|---|
@@ -247,14 +290,21 @@ leaves out the options that need it or shows a hint telling you what to install.
 | Microsoft Edge (ships with Windows; Chrome, Brave or Vivaldi work too) | Markdown → PDF/PNG, web page → PDF/PNG/JPG, SVG conversions | Markdown and `.html` → PDF fall back to Word or LibreOffice; the **PNG/JPG** options for web pages and Markdown, and **PDF** for `.mht`, aren't shown; SVG conversions stop with a message |
 | [HEIF Image Extensions](https://apps.microsoft.com/detail/9pmmsr1cgpwg) (free, Microsoft Store) | HEIC/HEIF photos (iPhone) | FFmpeg is used instead; with neither, HEIC conversions stop with a hint |
 | An OCR language in **Settings › Time & language › Language & region** | Copy Text from pictures and scanned PDFs | Copy Text stops with a hint to add one |
+| [7-Zip](https://www.7-zip.org/) (`winget install 7zip.7zip`) | Password-protected 7z; every 7z method on older Windows 10 | The Archive and Protect dialogs offer to install it |
+| [WinRAR](https://www.win-rar.com/) (`winget install RARLab.WinRAR`, shareware) | Creating RAR archives | The Archive and Protect dialogs offer to install it; opening RAR doesn't need it |
+| [Guetzli](https://github.com/google/guetzli) (downloaded on request to `%LocalAppData%\OGConverter\tools`, SHA-256 checked) | Guetzli JPEG re-encoding in Compress and Archive | The dialog offers a Download button |
 
 **Where FFmpeg is looked for**, in order: next to `og-converter.exe`, every folder on `PATH`, `%LocalAppData%\Microsoft\WinGet\Links`,
 `C:\ffmpeg\bin` and `C:\Program Files\ffmpeg\bin`. FFmpeg is detected **once, when OG Converter starts**, so after installing it,
 quit OG Converter from the tray and start it again.
 
-**Checking what was found:** **Settings › Engine** shows **Ready** or **Not found** for **FFmpeg** (with the path it found) and for the
-**Office documents** engine (with which of Office/LibreOffice it uses). Edge, the HEIF extension and OCR aren't listed there; you'll see
-their options missing, or a message when you convert.
+**Where 7-Zip, WinRAR and Guetzli are looked for**, every time they're needed (no restart after installing): next to `og-converter.exe`,
+`%LocalAppData%\OGConverter\tools`, `Program Files` (`7-Zip\7z.exe`, `WinRAR\Rar.exe`) and every folder on `PATH`.
+
+**Checking what was found:** **Settings › Engine** shows **Ready** or **Not found** for **FFmpeg** (with the path it found), the
+**Office documents** engine (with which of Office/LibreOffice it uses) and the web browser. Edge, the HEIF extension and OCR aren't
+listed there; you'll see their options missing, or a message when you convert. 7-Zip, WinRAR and Guetzli are reported in the Archive,
+Protect and Compress dialogs when a choice needs them.
 
 **To build from source:** the [.NET 10 SDK](https://dotnet.microsoft.com/) as well.
 
@@ -279,6 +329,10 @@ It also crops every image format, animated GIFs and video, trims video (exact an
 and converts a README with screenshots to every Markdown output, checking the pictures made it into the PDF and are embedded in the DOCX.
 It renders web pages, SVG and HEIC photos, reads text with OCR (including a scanned PDF), rotates pictures and video, extracts and re-packs 7z/TAR/GZ/BZ2/XZ archives,
 and checks Copy Text, Copy Image and Unblock.
+The archive section packs a folder and a file in **every** Archive format, extracts each one and compares the contents byte for byte
+(Windows' own `tar.exe` must also read them), checks that levels and options change the result, password ZIP/7z/RAR round-trips,
+refused choices (gz on a folder, a password on tar.gz), lossless and Guetzli picture re-encoding (including the parallel and
+too-big cases) and the Guetzli planner. Parts that need 7-Zip, WinRAR or Guetzli are skipped, with a note, when they aren't installed.
 It also checks wheel templates: every built-in renders in every wheel at 40% and 100%, imports are validated and sandboxed, and bad files are rejected
 (against a temporary templates folder, never your own). To include the plugin checks, build the sample plugin and point `OGCONVERTER_PLUGIN_SAMPLE` at it:
 
@@ -288,7 +342,9 @@ $env:OGCONVERTER_PLUGIN_SAMPLE = "$PWD\samples\WheelPluginSample\bin\Release\net
 dotnet run --project og-converter.csproj -- --test
 ```
 
-`--test markdown,everyday` runs only those sections (README outputs; web pages, SVG, HEIC, OCR, rotate/snapshot, archives and the new actions).
+`--test markdown,everyday,archive,protection` runs only those sections: `markdown` (README outputs), `everyday` (web pages, SVG, HEIC, OCR,
+rotate/snapshot, archive extraction and the newer actions), `archive` (the Archive action and Guetzli) and `protection` (every Protect
+method, including password 7z/RAR, and Unlock).
 
 `dotnet run --project og-converter.csproj -- --snapshot <folder>` renders every screen, dialog and installed template to PNG for visual review.
 
@@ -309,6 +365,10 @@ Output: `publish\og-converter.exe` (≈174 MB, no .NET install needed). It's the
 (shown in Settings › System and Windows Settings › Apps). Name the `.csproj` explicitly: the sample plugin under `samples/` is a second project.
 There's no separate installer: the exe installs itself from **Settings › System › Install**.
 
+To cut a release, add a `## [1.2.3]` section to [CHANGELOG.md](CHANGELOG.md) describing what changed, then push the tag `v1.2.3`.
+The workflow stamps the version (shown in About), publishes the exe, and uses that section as the release's **What's new**, which users see in
+**Settings › System › Check for updates** before updating in place.
+
 Adding `-p:EnableCompressionInSingleFile=true` shrinks the exe to ≈74 MB, but it then uses ≈60 MB more RAM at runtime
 (assemblies are decompressed into memory), so the release build ships uncompressed.
 
@@ -327,7 +387,7 @@ OGConverter/
 │   ├── WheelPainter.cs           # Shared geometry, text, hub helpers for renderers
 │   └── Renderers/                # Built-in renderers: Ring, Glass (macOS), Orbit (Dock), Neon
 ├── Models/
-│   └── Models.cs                 # WheelItem, ConversionJob, AppSettings, Protection/Compression options
+│   └── Models.cs                 # WheelItem, ConversionJob, AppSettings, Protection/Compression/Archive options
 ├── Services/
 │   ├── GlobalHookService.cs      # Low-level keyboard & mouse hooks for the drag gesture
 │   ├── ShellSelectionService.cs  # Finds the file being dragged in Explorer
@@ -343,7 +403,11 @@ OGConverter/
 │   ├── MediaEditService.cs       # Crop & Rotate (images, GIF, video), Trim, Snapshot, preview frames
 │   ├── DocumentEngine.cs         # Office (COM) / LibreOffice conversions, Markdown
 │   ├── BrowserRenderService.cs   # Headless Edge/Chrome: HTML/Markdown/SVG → PDF or full-page PNG
-│   ├── ArchiveService.cs         # Extract / re-pack ZIP, TAR, GZ (.NET) and 7z, RAR, XZ, CAB (Windows tar.exe)
+│   ├── ArchiveService.cs         # Extract / re-pack every archive format (.NET, SharpCompress, Windows tar.exe)
+│   ├── ArchiveWriter.cs          # Archive action: ZIP, 7z, RAR, tar.*, gz/bz2/xz/zst/lz4/lz/br, cpio, ISO, ar; Guetzli staging
+│   ├── DependencyService.cs      # Optional helpers: FFmpeg, LibreOffice, 7-Zip, WinRAR (winget), Guetzli (download)
+│   ├── GuetzliService.cs         # Guetzli encoding, PC specs, memory/time planner for parallel jobs
+│   ├── UpdateService.cs          # Check for updates: latest GitHub release, checksum, restart
 │   ├── OcrService.cs             # Text in pictures and scanned PDFs (Windows.Media.Ocr)
 │   ├── WindowsShellService.cs    # Unblock downloads (Mark of the Web), desktop wallpaper
 │   ├── PdfToolsService.cs        # Split, merge, rotate, metadata, text, PDF passwords
@@ -359,10 +423,13 @@ OGConverter/
 ├── Views/
 │   ├── RadialWheelOverlay.xaml   # Transparent, topmost radial menu
 │   ├── CompressDialog.xaml       # Lossless/lossy compression options
+│   ├── ArchiveDialog.xaml        # Archive format, level, method, pictures, password
+│   ├── GuetzliResourcePanel.cs   # CPU / memory bar / time panel shared by Archive and Compress
+│   ├── ExtrasDialog.xaml         # "Recommended extras" prompt (FFmpeg, LibreOffice)
 │   ├── CropDialog / TrimDialog   # Crop on a preview; pick a video's start and end
 │   ├── ProtectDialog / UnlockDialog / PdfSplitDialog / PdfMergeDialog
 │   └── ToastNotificationWindow   # Completion & progress toasts
-├── MainWindow.xaml               # Home, Settings, About (+ MainWindow.Templates.cs, MainWindow.System.cs)
+├── MainWindow.xaml               # Home, Settings, About (+ MainWindow.Templates.cs, .System.cs, .Dependencies.cs, .Updates.cs)
 ├── docs/
 │   ├── PLUGIN_GUIDE.md           # Beginner's guide: templates, sounds, animations, writing a plugin
 │   └── TEMPLATES.md              # Template & plugin quick reference
@@ -384,20 +451,25 @@ OGConverter/
    - Drag the file, tap **Ctrl**, drop on **Compress**.
    - Choose **Lossless** (identical quality) or **Lossy** (much smaller), pick a preset or fine-tune, then **Compress**.
 
-3. **Cropping and trimming**
+3. **Archiving and protecting**
+   - Drag a file or folder, tap **Alt**, drop on **Archive**. Pick a format, tune it, optionally add a password under **Advanced**, then **Create**.
+   - For a password-protected copy, drop on **Protect** instead and choose **Password-protected archive** (ZIP, 7z or RAR) or another method.
+   - To open a protected file again, drop it on **Unlock** and enter the password.
+
+4. **Cropping and trimming**
    - Drag the image or video, tap **Ctrl**, drop on **Crop** (or **Trim** for a video).
    - Adjust the area or the start and end in the window that opens, then press **Enter**.
 
-4. **Dashboard**
+5. **Dashboard**
    - Open OG Converter from the tray or taskbar to see history, try the playground, rebind keys and change settings.
    - The ▶ button in the title bar previews the wheel in the middle of the screen.
 
-5. **Make it yours**
+6. **Make it yours**
    - **Settings › Wheel templates**: pick a template, or add one from the community.
    - **Settings › Wheel › Size**: 40–135%. Small wheels show short labels or icons only.
    - **Settings › Advanced**: hide the shortcut hint bar, or turn on **Reduce motion**.
 
-6. **Install and start with Windows**
+7. **Install and start with Windows**
    - Click **Install** on the Home banner or in **Settings › System**. OG Converter then starts in the tray every time you sign in (toggle **Start with Windows** there).
 
 ---
@@ -412,12 +484,18 @@ Bug reports, ideas and pull requests for the Windows version are welcome too. Se
 
 ## 👨‍💻 Developers
 
-- **Anandhu Suresh**: [Portfolio](https://dr-at0mic.github.io/)
-- **Mahesh P S**
-- **Bijo Prasad**
+- **Anandhu Suresh**: [Portfolio](https://dr-at0mic.github.io/) · [GitHub](https://github.com/Dr-At0mic)
+- **Mahesh P S**: [GitHub](https://github.com/Yet-Zio)
 
 ---
 
 ## 📄 License
 
 Licensed under the [GNU General Public License v3.0](LICENSE).
+
+**Third-party components.** Bundled: [SharpZipLib](https://github.com/icsharpcode/SharpZipLib),
+[SharpCompress](https://github.com/adamhathcock/sharpcompress), [ZstdSharp](https://github.com/oleg-st/ZstdSharp),
+[K4os.Compression.LZ4](https://github.com/MiloszKrajewski/K4os.Compression.LZ4), [PDFsharp](https://github.com/empira/PDFsharp) 6.2.4 and
+[Konscious Argon2](https://github.com/kmaragon/Konscious.Security.Cryptography) (MIT), [Markdig](https://github.com/xoofx/markdig) (BSD-2-Clause)
+and [PdfPig](https://github.com/UglyToad/PdfPig) (Apache 2.0). Installed or downloaded only when you ask:
+FFmpeg (LGPL/GPL), LibreOffice (MPL), 7-Zip (LGPL), WinRAR (proprietary shareware) and Guetzli (Apache 2.0).

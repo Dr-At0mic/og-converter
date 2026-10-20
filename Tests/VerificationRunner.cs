@@ -31,6 +31,13 @@ namespace OgConverter.Tests
                     var quickSettings = new AppSettings { SaveInSameDirectory = true };
                     if (Array.IndexOf(only, "markdown") >= 0) await MarkdownVerification.RunAsync(quick, quickSettings, tempDir, testPng);
                     if (Array.IndexOf(only, "everyday") >= 0) await EverydayVerification.RunAsync(quick, quickSettings, tempDir);
+                    if (Array.IndexOf(only, "archive") >= 0) await ArchiveVerification.RunAsync(quick, quickSettings, tempDir, testPng);
+                    if (Array.IndexOf(only, "protection") >= 0)
+                    {
+                        string pdf = Path.Combine(tempDir, "protect_input.pdf");
+                        CreateDummyPdf(pdf, pageCount: 2);
+                        await ProtectionVerification.RunAsync(quick, quickSettings, tempDir, pdf);
+                    }
                     Console.WriteLine("=== SELECTED VERIFICATION TESTS PASSED ===");
                     return;
                 }
@@ -207,6 +214,7 @@ namespace OgConverter.Tests
 
                 await DocumentVerification.RunAsync(engine, settings, tempDir, testPdf);
                 await ProtectionVerification.RunAsync(engine, settings, tempDir, testPdf);
+                await ArchiveVerification.RunAsync(engine, settings, tempDir, testPng);
                 await CompressionVerification.RunAsync(engine, settings, tempDir);
                 await EditVerification.RunAsync(engine, settings, tempDir, testPng);
                 DragDropVerification.Run(tempDir);

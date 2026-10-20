@@ -28,7 +28,7 @@ namespace OgConverter.Tests
             VerificationRunner.CreateDummyPdf(pdf, 12);
 
             // Main window, every tab, at default and large sizes
-            var main = new MainWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000, ShowActivated = false };
+            var main = new MainWindow { WindowStartupLocation = WindowStartupLocation.Manual, Left = -20000, Top = -20000, ShowActivated = false, OfferExtras = false };
             main.Show();
             Controls.RadialWheelCanvas.ReduceMotion = true;
             foreach (var (w, h) in new[] { (1020, 720), (1440, 900) })
@@ -122,11 +122,70 @@ namespace OgConverter.Tests
             Save((FrameworkElement)unlockDlg.Content, Path.Combine(outDir, "dialog_unlock.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
             unlockDlg.Close();
 
+            var extras = new ExtrasDialog(true, true, _ => Task.FromResult<string?>(null)) { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
+            extras.Show();
+            Save((FrameworkElement)extras.Content, Path.Combine(outDir, "dialog_extras.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
+            extras.Close();
+
             File.Copy(pdf, pdf.Replace("Quarterly Report", "Appendix A"), true);
             var merge = new PdfMergeDialog(new[] { pdf, pdf.Replace("Quarterly Report", "Appendix A") }) { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
             merge.Show();
             Save((FrameworkElement)merge.Content, Path.Combine(outDir, "dialog_merge.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
             merge.Close();
+
+            // Archive: default ZIP, 7z with a password (Advanced open), tar.zst with Guetzli pictures; Protect as a 7z
+            string album = Path.Combine(outDir, "Holiday Album");
+            Directory.CreateDirectory(album);
+            File.WriteAllText(Path.Combine(album, "notes.txt"), "notes");
+            void SnapArchive(string name, Action<ArchiveDialog>? setup = null)
+            {
+                var dlg = new ArchiveDialog(album, null) { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
+                dlg.Show();
+                Pump();
+                setup?.Invoke(dlg);
+                Pump();
+                Save((FrameworkElement)dlg.Content, Path.Combine(outDir, name), Color.FromRgb(0x1E, 0x23, 0x2E));
+                dlg.Close();
+            }
+            static void PickFormat(ArchiveDialog d, string key) =>
+                d.FormatCombo.SelectedItem = d.FormatCombo.Items.Cast<System.Windows.Controls.ComboBoxItem>().First(i => (string)i.Tag == key);
+            SnapArchive("dialog_archive_zip.png");
+            SnapArchive("dialog_archive_7z_password.png", d =>
+            {
+                PickFormat(d, "7z");
+                d.AdvancedPanel.Visibility = Visibility.Visible;
+                d.PasswordInput.Password = d.ConfirmInput.Password = "correct horse battery";
+            });
+            SnapArchive("dialog_archive_zst.png", d => PickFormat(d, "tar.zst"));
+
+            // Guetzli: a 36.6 MP photo, a folder of 12 MP photos (parallel jobs), and an 81 MP photo (over the free memory)
+            void SnapGuetzli(string source, string name)
+            {
+                var dlg = new ArchiveDialog(source, new ArchiveOptions { Images = ImageRecompression.Guetzli }) { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
+                dlg.Show();
+                PumpFor(TimeSpan.FromSeconds(1.5)); // picture sizes are read in the background
+                Save((FrameworkElement)dlg.Content, Path.Combine(outDir, name), Color.FromRgb(0x1E, 0x23, 0x2E));
+                dlg.Close();
+            }
+            string GrayJpeg(string path, int w, int h)
+            {
+                if (!File.Exists(path)) ImageCodec.SaveJpeg(BitmapSource.Create(w, h, 96, 96, PixelFormats.Gray8, null, new byte[w * h], w), path, 90, null);
+                return path;
+            }
+            SnapGuetzli(GrayJpeg(Path.Combine(outDir, "Big photo.jpg"), 8064, 4536), "dialog_archive_guetzli_photo.png");
+            string shoot = Path.Combine(outDir, "Photo shoot");
+            Directory.CreateDirectory(shoot);
+            for (int n = 1; n <= 8; n++) GrayJpeg(Path.Combine(shoot, $"IMG_{n:0000}.jpg"), 4240, 2832);
+            SnapGuetzli(shoot, "dialog_archive_guetzli_folder.png");
+            SnapGuetzli(GrayJpeg(Path.Combine(outDir, "Panorama.jpg"), 9000, 9000), "dialog_archive_guetzli_too_big.png");
+
+            var protectArchive = new ProtectDialog(album) { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
+            protectArchive.Show();
+            protectArchive.ArchiveFormatCombo.SelectedIndex = 1;
+            protectArchive.PasswordInput.Password = protectArchive.ConfirmInput.Password = "correct horse battery";
+            Pump();
+            Save((FrameworkElement)protectArchive.Content, Path.Combine(outDir, "dialog_protect_archive_7z.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
+            protectArchive.Close();
 
             // Compress dialog: every file kind, both modes, with real media so file details and GPU detection show
             string? ffmpeg = ConversionEngine.FindFFmpeg();

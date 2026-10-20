@@ -38,7 +38,7 @@ namespace OgConverter.Services
                 "pdf" => CompressionKind.Pdf,
                 "docx" or "xlsx" or "pptx" or "ppsx" or "docm" or "xlsm" or "pptm" or "odt" or "ods" or "odp" => CompressionKind.Office,
                 "zip" or "tar" => CompressionKind.Archive,
-                "gz" or "tgz" or "7z" or "rar" or "bz2" or "xz" or "zst" or "br" or "cab" => null,
+                "gz" or "tgz" or "7z" or "rar" or "bz2" or "xz" or "zst" or "br" or "cab" or "lz4" or "lz" or "tzst" or "txz" or "tbz2" => null,
                 _ => FormatRegistry.DetectCategory(path) switch
                 {
                     FileCategory.Video => CompressionKind.Video,
@@ -140,6 +140,7 @@ namespace OgConverter.Services
                     if (ext != "avif" && !hasAlpha) list.Add(("avif", "AVIF: ≈50% smaller than JPEG, modern apps"));
                     list.Add(("jxl", "JPEG XL: smallest at high quality, limited app support"));
                     if (ext is not ("jpg" or "jpeg") && !hasAlpha) list.Add(("jpg", "JPEG: opens in absolutely everything"));
+                    if (!hasAlpha) list.Add(("guetzli", "JPEG via Guetzli: 20–30% smaller, opens everywhere (very slow)"));
                     break;
 
                 case CompressionKind.AnimatedGif:
@@ -240,7 +241,7 @@ namespace OgConverter.Services
 
             string target = kind switch
             {
-                CompressionKind.Image => await CompressImageAsync(src, o, ffmpeg, targetFor),
+                CompressionKind.Image => await CompressImageAsync(src, o, ffmpeg, targetFor, progress),
                 CompressionKind.AnimatedGif => await CompressGifAsync(src, o, RequireFFmpeg(ffmpeg), targetFor, progress),
                 CompressionKind.Svg => await Task.Run(() => CompressSvg(src, o, targetFor)),
                 CompressionKind.Video => await CompressVideoAsync(src, o, RequireFFmpeg(ffmpeg), targetFor, progress),
@@ -278,16 +279,40 @@ namespace OgConverter.Services
 
         // ---------- Images ----------
 
-        private static async Task<string> CompressImageAsync(string src, CompressionOptions o, string? ffmpeg, Func<string, string, string> targetFor)
+        private static async Task<string> CompressImageAsync(string src, CompressionOptions o, string? ffmpeg, Func<string, string, string> targetFor, IProgress<double>? progress = null)
         {
             string ext = Ext(src);
             bool lossless = o.Mode == CompressionMode.Lossless;
             string outExt = o.Format switch
             {
                 "keep" => ext == "jpeg" ? "jpg" : ext == "tif" ? "tiff" : ext,
+                "guetzli" => "jpg",
                 _ => o.Format
             };
             string target = targetFor(outExt, "_compressed");
+
+            if (o.Format == "guetzli")
+            {
+                // Decode here (EXIF rotation, resize, transparency flattened), then let Guetzli encode from a lossless PNG
+                var picture = await Task.Run(() => ImageCodec.TryLoad(src, applyOrientation: true, o.MaxDimension))
+                              ?? throw new InvalidOperationException("Windows can't open this picture.");
+                string png = NewTempPath("png");
+                try
+                {
+                    await Task.Run(() => ImageCodec.SavePng(ImageCodec.FlattenIfTransparent(picture), png));
+                    await GuetzliService.EncodeAsync(png, target, o.Quality, progress, o.GuetzliAllowLarge);
+                }
+                catch
+                {
+                    TryDelete(target);
+                    throw;
+                }
+                finally
+                {
+                    TryDelete(png);
+                }
+                return target;
+            }
 
             // JPEG lossless: drop metadata segments, keep the compressed image data byte-for-byte
             if (lossless && outExt == "jpg")
@@ -950,7 +975,13 @@ namespace OgConverter.Services
 
                 case CompressionKind.Image or CompressionKind.AnimatedGif:
                     string fmt = o.Format == "keep" ? ext.ToUpperInvariant() : o.Format.ToUpperInvariant();
-                    if (o.Mode == CompressionMode.Lossy)
+                    if (o.Format == "guetzli")
+                    {
+                        parts.Add($"JPEG (Guetzli), quality {Math.Max(o.Quality, GuetzliService.MinQuality)}");
+                        if (o.MaxDimension > 0) parts.Add($"max {o.MaxDimension} px");
+                        parts.Add("about a minute per megapixel");
+                    }
+                    else if (o.Mode == CompressionMode.Lossy)
                     {
                         string q = o.Format == "keep" && ext == "png" || o.Format == "gif" ? $"{PaletteColors(o.Quality)} colors" : $"quality {o.Quality}";
                         parts.Add($"{fmt}, {q}");

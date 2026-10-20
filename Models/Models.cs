@@ -57,6 +57,9 @@ namespace OgConverter.Models
         /// <summary>Mode, format and quality choices, for Compress.</summary>
         public CompressionOptions? Compression { get; set; }
 
+        /// <summary>Format, level and password choices, for the Archive action.</summary>
+        public ArchiveOptions? Archive { get; set; }
+
         /// <summary>Area to keep, in pixels of the upright image or video frame, for Crop.</summary>
         public System.Windows.Int32Rect? Crop { get; set; }
 
@@ -119,6 +122,10 @@ namespace OgConverter.Models
         public int PdfDpi { get; set; } = 150;
         public bool Grayscale { get; set; }
 
+        // Guetzli
+        /// <summary>Encode even if the picture needs more memory than is free.</summary>
+        public bool GuetzliAllowLarge { get; set; }
+
         public CompressionOptions Clone() => (CompressionOptions)MemberwiseClone();
     }
 
@@ -127,7 +134,7 @@ namespace OgConverter.Models
         PdfPassword,     // standard PDF security handler, opens in any PDF reader
         OfficePassword,  // Office "Encrypt with password" (Agile encryption)
         EncryptedFile,   // .ogx container: AEAD cipher + memory-hard key derivation
-        PasswordZip      // password-protected .zip
+        PasswordArchive  // password-protected .zip, .7z or .rar
     }
 
     public enum PdfCipher { Aes256, Aes128, Rc4_128 }
@@ -157,8 +164,74 @@ namespace OgConverter.Models
         public FileCipher FileCipher { get; set; } = FileCipher.Aes256Gcm;
         public KeyDerivation KeyDerivation { get; set; } = KeyDerivation.Argon2id;
 
-        // ZIP
+        // Password-protected archive
+        /// <summary>"zip", "7z" or "rar".</summary>
+        public string ArchiveFormat { get; set; } = "zip";
         public ZipCipher ZipCipher { get; set; } = ZipCipher.Aes256;
+        /// <summary>7z and RAR: hide the file names too, so nothing is visible without the password.</summary>
+        public bool EncryptNames { get; set; } = true;
+        /// <summary>Native compression level of <see cref="ArchiveFormat"/>; -1 = its default.</summary>
+        public int ArchiveLevel { get; set; } = -1;
+    }
+
+    /// <summary>What happens to pictures inside a folder before it is packed.</summary>
+    public enum ImageRecompression
+    {
+        None,
+        /// <summary>JPEG metadata removed, PNGs re-encoded; pixels unchanged.</summary>
+        Lossless,
+        /// <summary>JPEGs re-encoded with Google's Guetzli: visually identical, 20–30% smaller, very slow.</summary>
+        Guetzli
+    }
+
+    /// <summary>Every choice the Archive dialog offers. Each format reads the fields that apply to it.</summary>
+    public class ArchiveOptions
+    {
+        /// <summary>Format key from <c>ArchiveWriter.Formats</c>: zip, 7z, rar, tar, tar.gz, tar.zst, gz, zst, cpio, iso…</summary>
+        public string Format { get; set; } = "zip";
+
+        /// <summary>The format's native level (zip 0–9, zstd 1–22, Brotli 0–11, RAR 0–5…); -1 = its default.</summary>
+        public int Level { get; set; } = -1;
+
+        /// <summary>ZIP: deflate, store. 7z: lzma2, lzma, ppmd, bzip2, deflate, store. Blank = the format's default.</summary>
+        public string Method { get; set; } = "";
+
+        /// <summary>7z and RAR: compress all files as one stream (smaller, but one damaged byte affects everything after it).</summary>
+        public bool Solid { get; set; } = true;
+
+        /// <summary>Use every CPU core where the compressor supports it (7z, RAR, xz, zstd).</summary>
+        public bool MultiThreaded { get; set; } = true;
+
+        /// <summary>zstd: long-distance matching with a 128 MiB window (much smaller for big, repetitive data).</summary>
+        public bool LongRange { get; set; }
+
+        /// <summary>Brotli: log2 of the window size, 10–24.</summary>
+        public int BrotliWindow { get; set; } = 22;
+
+        /// <summary>RAR: recovery record as a percentage of the archive size, 0 = none.</summary>
+        public int RecoveryPercent { get; set; }
+
+        /// <summary>Blank = no password. Only ZIP, 7z and RAR can hold one. Never saved to settings.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string Password { get; set; } = string.Empty;
+
+        public ZipCipher ZipCipher { get; set; } = ZipCipher.Aes256;
+
+        /// <summary>7z and RAR: encrypt the file names too.</summary>
+        public bool EncryptNames { get; set; } = true;
+
+        public ImageRecompression Images { get; set; } = ImageRecompression.None;
+
+        /// <summary>Guetzli quality, 84–100 (Guetzli refuses lower values).</summary>
+        public int GuetzliQuality { get; set; } = 90;
+
+        /// <summary>Pictures Guetzli encodes at the same time; 0 = as many as the cores and free memory allow.</summary>
+        public int GuetzliJobs { get; set; }
+
+        /// <summary>Also encode pictures that need more memory than is free (Windows pages to disk; slow, but it works).</summary>
+        public bool GuetzliAllowLarge { get; set; }
+
+        public ArchiveOptions Clone() => (ArchiveOptions)MemberwiseClone();
     }
 
     public class ConversionJob : INotifyPropertyChanged
@@ -250,20 +323,23 @@ namespace OgConverter.Models
         public bool ShowToastOnComplete { get; set; } = true;
         /// <summary>Launch at sign-in, straight to the tray. Mirrors the HKCU Run entry, which is the source of truth.</summary>
         public bool StartWithWindows { get; set; } = false;
-        public double WheelScale { get; set; } = 1.0;
+        public double WheelScale { get; set; } = 0.45;
         public bool SoundFeedbackEnabled { get; set; } = true;
 
         /// <summary>Id of the active wheel template (see TemplateManager).</summary>
         public string WheelTemplateId { get; set; } = "og-classic";
 
         /// <summary>The Shift / Ctrl / Alt / Esc bar under the wheel.</summary>
-        public bool ShowKeyHints { get; set; } = true;
+        public bool ShowKeyHints { get; set; } = false;
 
         /// <summary>Skip wheel animations.</summary>
         public bool ReduceMotion { get; set; } = false;
 
         /// <summary>The "Running without installing" banner on Home was dismissed.</summary>
         public bool HideInstallBanner { get; set; } = false;
+
+        /// <summary>The "Recommended extras" prompt (FFmpeg, LibreOffice) was shown once; Settings › Engine has the same buttons.</summary>
+        public bool ExtrasPromptShown { get; set; } = false;
 
         /// <summary>
         /// false (default): the wheel stays open after the shortcut key is let go; drop to choose, Esc to cancel.
@@ -273,6 +349,9 @@ namespace OgConverter.Models
 
         /// <summary>Last choices made in the Compress dialog, keyed by <see cref="CompressionKind"/> name.</summary>
         public System.Collections.Generic.Dictionary<string, CompressionOptions> LastCompression { get; set; } = new();
+
+        /// <summary>Last choices made in the Archive dialog (the password is never saved).</summary>
+        public ArchiveOptions? LastArchive { get; set; }
 
         public static readonly string[] AvailableWheelKeys = { "Shift", "Control", "Alt", "Win", "Space" };
 

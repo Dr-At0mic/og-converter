@@ -199,11 +199,23 @@ namespace OgConverter.Views
             }
 
             FormatCombo("Format");
+            if (_o.Format == "guetzli" && !GuetzliService.IsAvailable) DownloadGuetzliButton();
             if (lossy)
             {
                 bool palette = _o.Format == "keep" && _ext == "png";
                 QualitySlider(palette ? "Colors" : "Quality", q => palette ? $"{CompressionService.PaletteColors(q)} colors" : FormatImageQuality(q));
                 ResizeCombo(_image?.Bitmap is { } b ? Math.Max(b.PixelWidth, b.PixelHeight) : 0);
+            }
+            if (_o.Format == "guetzli" && GuetzliService.IsAvailable && lossy && GuetzliMegapixels() is { } megapixels)
+            {
+                var specs = GuetzliService.Specs();
+                if (megapixels > GuetzliService.SafeMegapixels(specs) || _o.GuetzliAllowLarge)
+                {
+                    Check("Do it anyway, even if it needs more than the free memory", _o.GuetzliAllowLarge, v => { _o.GuetzliAllowLarge = v; Dispatcher.BeginInvoke(Rebuild); });
+                    Note($"No admin rights are needed: Windows lends apps all the memory it has, then the page file. Resizing (Longest edge) makes it smaller and much faster.");
+                }
+                // The bar shows what it needs even when that's more than is free
+                SettingsPanel.Children.Add(GuetzliResourcePanel.Build(this, GuetzliService.Plan(new[] { megapixels }, 1, true, specs)));
             }
             Check("Remove metadata (GPS location, camera details, editing history)", _o.StripMetadata, v => _o.StripMetadata = v);
         }
@@ -509,7 +521,7 @@ namespace OgConverter.Views
             {
                 if (longestEdge == 0 || px < longestEdge || _o.MaxDimension == px) sizes.Add((px, name));
             }
-            Combo("Longest edge", sizes, _o.MaxDimension, v => _o.MaxDimension = (int)v);
+            Combo("Longest edge", sizes, _o.MaxDimension, v => _o.MaxDimension = (int)v, rebuild: _o.Format == "guetzli");
         }
 
         private void QualitySlider(string label, Func<int, string> describe)
@@ -534,6 +546,29 @@ namespace OgConverter.Views
             scale.Children.Add(new TextBlock { Text = "Smaller file", FontSize = 11, Foreground = (Brush)FindResource("TextTertiaryBrush") });
             scale.Children.Add(new TextBlock { Text = "Better quality", FontSize = 11, HorizontalAlignment = HorizontalAlignment.Right, Foreground = (Brush)FindResource("TextTertiaryBrush") });
             SettingsPanel.Children.Add(scale);
+        }
+
+        /// <summary>The picture's size after the optional resize (Longest edge), or null before it's been inspected.</summary>
+        private double? GuetzliMegapixels()
+        {
+            if (_image == null) return null;
+            double w = _image.Bitmap.PixelWidth, h = _image.Bitmap.PixelHeight;
+            double scale = _o.MaxDimension > 0 && Math.Max(w, h) > _o.MaxDimension ? _o.MaxDimension / Math.Max(w, h) : 1;
+            return w * h * scale * scale / 1e6;
+        }
+
+        private void DownloadGuetzliButton()
+        {
+            var button = new Button { Content = "Download Guetzli", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 14), Padding = new Thickness(14, 5, 14, 5) };
+            button.Click += async (_, _) =>
+            {
+                button.IsEnabled = false;
+                button.Content = "Downloading…";
+                string? error = await DependencyService.InstallToolAsync(Dependency.Guetzli);
+                if (error != null) MessageBox.Show(this, error, "Download Guetzli", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Rebuild();
+            };
+            SettingsPanel.Children.Add(button);
         }
 
         private CheckBox Check(string text, bool value, Action<bool> set)
@@ -604,6 +639,21 @@ namespace OgConverter.Views
             switch (_kind)
             {
                 case CompressionKind.Image:
+                    if (_o.Format == "guetzli")
+                    {
+                        if (!GuetzliService.IsAvailable) return "Guetzli isn't installed yet. Use the button above to download it (about 0.6 MB, from Google's GitHub release).";
+                        if (_o.Quality < GuetzliService.MinQuality) warnings.Add($"Guetzli works from quality {GuetzliService.MinQuality} up, so {GuetzliService.MinQuality} is used.");
+                        if (GuetzliMegapixels() is { } megapixels)
+                        {
+                            var plan = GuetzliService.Plan(new[] { megapixels }, 1, _o.GuetzliAllowLarge);
+                            if (plan.Included.Count == 0)
+                                return $"At {megapixels:0.#} megapixels this needs about {SystemSpecs.Gb(GuetzliService.BytesFor(megapixels))} of memory; {SystemSpecs.Gb(plan.Specs.FreeRamBytes)} is free. Choose a smaller Longest edge, close some apps, or tick \"Do it anyway\".";
+                            if (plan.MemoryLoad > 1)
+                                warnings.Add("This needs more than the free memory: Windows will use the page file, which is much slower and can make the PC sluggish.");
+                            warnings.Add($"Guetzli is slow: {GuetzliService.DescribeTime(plan.Seconds)} for this picture.");
+                        }
+                        break;
+                    }
                     if (_o.Format == "jxl") warnings.Add("JPEG XL opens in Photoshop, GIMP, Affinity, Safari and Windows with the JPEG XL extension; most other browsers can't show it yet.");
                     if (_o.Format == "avif") warnings.Add("AVIF opens in modern browsers, phones and Windows 11 Photos; older software may not.");
                     if (lossy && _o.Format == "keep" && _ext == "png" && _image?.HasPartialAlpha == true)

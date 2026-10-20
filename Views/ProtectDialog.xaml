@@ -181,14 +181,45 @@
                                 <TextBlock x:Name="VaultNote" Style="{StaticResource Caption}" FontSize="11.5" Margin="0,8,0,0" />
                             </StackPanel>
 
-                            <!-- ZIP -->
+                            <!-- Password-protected archive -->
                             <StackPanel x:Name="ZipOptions">
-                                <TextBlock Text="Encryption" Style="{StaticResource FieldLabel}" />
-                                <ComboBox x:Name="ZipCipherCombo" SelectionChanged="OnInputChanged">
-                                    <ComboBoxItem Content="AES-256 (WinZip AES) · recommended" IsSelected="True" />
-                                    <ComboBoxItem Content="ZipCrypto (legacy, weak)" />
+                                <TextBlock Text="Archive format" Style="{StaticResource FieldLabel}" />
+                                <ComboBox x:Name="ArchiveFormatCombo" SelectionChanged="OnInputChanged">
+                                    <ComboBoxItem Content="ZIP · opens on every computer" Tag="zip" IsSelected="True" />
+                                    <ComboBoxItem Content="7z · AES-256, usually the smallest" Tag="7z" />
+                                    <ComboBoxItem Content="RAR · AES-256 (made with WinRAR)" Tag="rar" />
                                 </ComboBox>
-                                <TextBlock x:Name="ZipNote" Style="{StaticResource Caption}" FontSize="11.5" Margin="0,8,0,0" />
+
+                                <StackPanel x:Name="ZipCipherPanel">
+                                    <TextBlock Text="Encryption" Style="{StaticResource FieldLabel}" Margin="0,14,0,8" />
+                                    <ComboBox x:Name="ZipCipherCombo" SelectionChanged="OnInputChanged">
+                                        <ComboBoxItem Content="AES-256 (WinZip AES) · recommended" IsSelected="True" />
+                                        <ComboBoxItem Content="ZipCrypto (legacy, weak)" />
+                                    </ComboBox>
+                                </StackPanel>
+                                <CheckBox x:Name="EncryptNamesCheck" Style="{StaticResource OptionCheck}" IsChecked="True" Margin="0,14,0,0"
+                                          Checked="OnInputChanged" Unchecked="OnInputChanged">
+                                    <TextBlock Text="Encrypt file names too, so nothing is visible without the password" TextWrapping="Wrap" />
+                                </CheckBox>
+
+                                <TextBlock Text="Compression" Style="{StaticResource FieldLabel}" Margin="0,14,0,8" />
+                                <ComboBox x:Name="ArchiveLevelCombo" SelectionChanged="OnInputChanged">
+                                    <ComboBoxItem Content="Store (no compression, fastest)" Tag="store" />
+                                    <ComboBoxItem Content="Normal" Tag="normal" IsSelected="True" />
+                                    <ComboBoxItem Content="Maximum (smaller, slower)" Tag="max" />
+                                </ComboBox>
+
+                                <Border x:Name="ToolMissingPanel" Background="{DynamicResource WarningSubtleBrush}" CornerRadius="6" Padding="12,10" Margin="0,14,0,0" Visibility="Collapsed">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="ToolMissingText" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                        <Button x:Name="InstallToolButton" Grid.Column="1" Padding="12,4" FontSize="12" Click="OnInstallToolClick" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock x:Name="ZipNote" Style="{StaticResource Caption}" FontSize="11.5" Margin="0,8,0,0" TextWrapping="Wrap" />
                             </StackPanel>
                         </StackPanel>
                     </Border>

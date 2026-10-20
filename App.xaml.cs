@@ -99,9 +99,12 @@ namespace OgConverter
                 return;
             }
 
+            Services.UpdateService.CleanupAfterUpdate();
+            Services.InstallService.RefreshUninstallEntryVersion();
+
             base.OnStartup(e);
 
-            var main = new MainWindow();
+            var main = new MainWindow { JustInstalled = Array.IndexOf(e.Args, Services.InstallService.JustInstalledArg) >= 0 };
             MainWindow = main;
             if (Array.IndexOf(e.Args, Services.InstallService.BackgroundArg) >= 0)
             {

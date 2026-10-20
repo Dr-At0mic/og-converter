@@ -70,9 +70,9 @@ namespace OgConverter.Views
                 ProtectionMethod.PdfPassword => ("PDF password", "Standard PDF encryption. Opens in any PDF reader once the password is entered."),
                 ProtectionMethod.OfficePassword => ("Office password", "Office's built-in \"Encrypt with password\". Opens in Word, Excel or PowerPoint."),
                 ProtectionMethod.EncryptedFile => ("Encrypted file (.ogx)", "Strongest option for any file: modern authenticated encryption. Opens with OG Converter."),
-                _ => ("Password-protected ZIP", folder
-                    ? "Packs the folder into a .zip that asks for the password when extracted."
-                    : "A .zip that asks for the password when extracted. Easy to share.")
+                _ => ("Password-protected archive", folder
+                    ? "Packs the folder into a .zip, .7z or .rar that asks for the password when extracted."
+                    : "A .zip, .7z or .rar that asks for the password when extracted. Easy to share.")
             };
 
             var titleRow = new StackPanel { Orientation = Orientation.Horizontal };
@@ -163,14 +163,36 @@ namespace OgConverter.Views
             PdfOptions.Visibility = method == ProtectionMethod.PdfPassword ? Visibility.Visible : Visibility.Collapsed;
             OfficeOptions.Visibility = method == ProtectionMethod.OfficePassword ? Visibility.Visible : Visibility.Collapsed;
             VaultOptions.Visibility = method == ProtectionMethod.EncryptedFile ? Visibility.Visible : Visibility.Collapsed;
-            ZipOptions.Visibility = method == ProtectionMethod.PasswordZip ? Visibility.Visible : Visibility.Collapsed;
+            ZipOptions.Visibility = method == ProtectionMethod.PasswordArchive ? Visibility.Visible : Visibility.Collapsed;
 
             bool restricted = AllowPrintCheck.IsChecked != true || AllowCopyCheck.IsChecked != true || AllowEditCheck.IsChecked != true || AllowCommentCheck.IsChecked != true;
             PermissionsPasswordPanel.Visibility = restricted ? Visibility.Visible : Visibility.Collapsed;
 
-            ZipNote.Text = ZipCipherCombo.SelectedIndex == 1
-                ? "ZipCrypto opens in Windows Explorer, but it is easy to crack. Use it only for convenience, not secrets."
-                : "AES-256 zips open in 7-Zip, WinRAR and most archive tools. Older Windows Explorer versions can't open them.";
+            string format = ArchiveFormat;
+            ZipCipherPanel.Visibility = format == "zip" ? Visibility.Visible : Visibility.Collapsed;
+            EncryptNamesCheck.Visibility = format == "zip" ? Visibility.Collapsed : Visibility.Visible;
+            ZipNote.Text = format switch
+            {
+                "7z" => "Opens in 7-Zip, WinRAR, PeaZip and macOS archive apps. With file names encrypted, even the list of contents needs the password.",
+                "rar" => "Opens in WinRAR, 7-Zip and most archive apps. Creating RAR needs WinRAR (shareware); opening it doesn't.",
+                _ when ZipCipherCombo.SelectedIndex == 1 => "ZipCrypto opens in Windows Explorer, but it is easy to crack. Use it only for convenience, not secrets.",
+                _ => "AES-256 zips open in 7-Zip, WinRAR and most archive tools. File names stay readable (ZIP can't hide them); use 7z to hide them too."
+            };
+
+            // 7z with a password needs 7-Zip; RAR needs WinRAR
+            var missing = method == ProtectionMethod.PasswordArchive
+                ? ArchiveWriter.MissingTool(ArchiveWriter.Find(format), new ArchiveOptions { Format = format, Password = "x" })
+                : null;
+            ToolMissingPanel.Visibility = missing != null ? Visibility.Visible : Visibility.Collapsed;
+            if (missing is { } tool)
+            {
+                string name = DependencyService.DisplayName(tool);
+                ToolMissingText.Text = tool == Dependency.WinRar
+                    ? "Creating RAR archives needs WinRAR (shareware, free to try), which isn't installed."
+                    : $".{format} passwords need {name} (free), which isn't installed.";
+                InstallToolButton.Content = DependencyService.CanInstallDependency(tool) ? $"Install {name}" : "Download page";
+                InstallToolButton.Tag = tool;
+            }
 
             UpdateStrength(Password);
 
@@ -185,7 +207,9 @@ namespace OgConverter.Views
                 problem = "The permissions password must differ from the open password, or anyone could lift the restrictions.";
             else if (method == ProtectionMethod.PdfPassword && PdfCipherCombo.SelectedIndex == 2)
                 warning = "RC4 is broken and only for very old readers. Prefer AES-256.";
-            else if (method == ProtectionMethod.PasswordZip && ZipCipherCombo.SelectedIndex == 1)
+            else if (missing != null)
+                problem = $"Install {DependencyService.DisplayName(missing.Value)} to create .{format} archives, or choose another format.";
+            else if (method == ProtectionMethod.PasswordArchive && format == "zip" && ZipCipherCombo.SelectedIndex == 1)
                 warning = "ZipCrypto can be cracked quickly. Prefer AES-256 for anything sensitive.";
             else if (ProtectionService.EstimateStrength(pw) == 0)
                 warning = "This password is weak. Longer is stronger: try a passphrase of several words.";
@@ -207,8 +231,38 @@ namespace OgConverter.Views
             ProtectionMethod.PdfPassword => $"Saves {Path.GetFileNameWithoutExtension(_path)}_protected.pdf with {((ComboBoxItem)PdfCipherCombo.SelectedItem).Content.ToString()!.Split(" ·")[0]} encryption.",
             ProtectionMethod.OfficePassword => $"Saves {Path.GetFileNameWithoutExtension(_path)}_protected.{_ext} with an open password{(ModifyPasswordInput.Password.Length > 0 ? " and an edit password" : "")}.",
             ProtectionMethod.EncryptedFile => $"Encrypts with {(VaultCipherCombo.SelectedIndex == 1 ? "ChaCha20-Poly1305" : "AES-256-GCM")}, key derived with {(KdfCombo.SelectedIndex == 1 ? "PBKDF2-SHA512" : "Argon2id")}.",
-            _ => $"Creates a password-protected .zip using {(ZipCipherCombo.SelectedIndex == 1 ? "ZipCrypto" : "AES-256")}."
+            _ => ArchiveFormat == "zip"
+                ? $"Creates a password-protected .zip using {(ZipCipherCombo.SelectedIndex == 1 ? "ZipCrypto" : "AES-256")}."
+                : $"Creates a password-protected .{ArchiveFormat} using AES-256{(EncryptNamesCheck.IsChecked == true ? ", file names hidden" : "")}."
         };
+
+        private string ArchiveFormat => (ArchiveFormatCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "zip";
+
+        /// <summary>Store, the format's default, or its maximum level.</summary>
+        private int ArchiveLevel => ((ArchiveLevelCombo.SelectedItem as ComboBoxItem)?.Tag as string) switch
+        {
+            "store" => 0,
+            "max" => ArchiveWriter.Find(ArchiveFormat).MaxLevel,
+            _ => -1
+        };
+
+        private async void OnInstallToolClick(object sender, RoutedEventArgs e)
+        {
+            if (InstallToolButton.Tag is not Dependency tool) return;
+            if (!DependencyService.CanInstallDependency(tool))
+            {
+                try { DependencyService.OpenDownloadPage(tool); } catch (System.ComponentModel.Win32Exception) { }
+                return;
+            }
+            object content = InstallToolButton.Content;
+            InstallToolButton.IsEnabled = false;
+            InstallToolButton.Content = "Installing…";
+            string? error = await DependencyService.InstallToolAsync(tool);
+            InstallToolButton.Content = content;
+            InstallToolButton.IsEnabled = true;
+            if (error != null) MessageBox.Show(this, error, $"Install {DependencyService.DisplayName(tool)}", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Validate();
+        }
 
         private void UpdateStrength(string password)
         {
@@ -253,7 +307,10 @@ namespace OgConverter.Views
                     ModifyPassword = ModifyPasswordInput.Password,
                     FileCipher = VaultCipherCombo.SelectedIndex == 1 ? FileCipher.ChaCha20Poly1305 : FileCipher.Aes256Gcm,
                     KeyDerivation = KdfCombo.SelectedIndex == 1 ? KeyDerivation.Pbkdf2Sha512 : KeyDerivation.Argon2id,
-                    ZipCipher = ZipCipherCombo.SelectedIndex == 1 ? ZipCipher.ZipCrypto : ZipCipher.Aes256
+                    ZipCipher = ZipCipherCombo.SelectedIndex == 1 ? ZipCipher.ZipCrypto : ZipCipher.Aes256,
+                    ArchiveFormat = ArchiveFormat,
+                    EncryptNames = EncryptNamesCheck.IsChecked == true,
+                    ArchiveLevel = ArchiveLevel
                 }
             };
             DialogResult = true;

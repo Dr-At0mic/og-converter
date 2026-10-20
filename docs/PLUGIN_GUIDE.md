@@ -250,7 +250,7 @@ How a color decides between light and dark styling: if `ring` is a light color, 
 
 ### `app`: the colors of the rest of the app
 
-These color the main window (Home, Settings, About), the dialogs (Compress, Protect, Split…), and the pop-up notifications. Everything is optional: whatever you leave out comes from `base`.
+These color the main window (Home, Settings, About), the dialogs (Compress, Archive, Protect, Split…), and the pop-up notifications. Everything is optional: whatever you leave out comes from `base`.
 
 | Setting | Where you see it | Dark default | Light default |
 |---|---|---|---|

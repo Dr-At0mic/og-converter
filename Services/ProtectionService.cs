@@ -15,19 +15,19 @@ namespace OgConverter.Services
     /// </summary>
     public static class ProtectionService
     {
-        public enum LockKind { None, Pdf, Office, Vault, Zip }
+        public enum LockKind { None, Pdf, Office, Vault, Zip, SevenZipOrRar }
 
         /// <summary>Methods that apply to this path, best first.</summary>
         public static List<ProtectionMethod> AvailableMethods(string path)
         {
-            if (Directory.Exists(path)) return new() { ProtectionMethod.PasswordZip };
+            if (Directory.Exists(path)) return new() { ProtectionMethod.PasswordArchive };
 
             string ext = Path.GetExtension(path).ToLowerInvariant();
             var methods = new List<ProtectionMethod>();
             if (ext == ".pdf") methods.Add(ProtectionMethod.PdfPassword);
             if (DocumentEngine.CanProtectOffice(ext)) methods.Add(ProtectionMethod.OfficePassword);
             methods.Add(ProtectionMethod.EncryptedFile);
-            methods.Add(ProtectionMethod.PasswordZip);
+            methods.Add(ProtectionMethod.PasswordArchive);
             return methods;
         }
 
@@ -41,7 +41,26 @@ namespace OgConverter.Services
             if (ext == ".pdf" && PdfToolsService.IsEncrypted(path)) return LockKind.Pdf;
             if (DocumentEngine.IsEncryptedOfficeFile(path)) return LockKind.Office;
             if (ext == ".zip" && IsEncryptedZip(path)) return LockKind.Zip;
+            if (ext is ".7z" or ".rar" && IsEncryptedSevenZipOrRar(path)) return LockKind.SevenZipOrRar;
             return LockKind.None;
+        }
+
+        /// <summary>Encrypted contents, or encrypted headers (names hidden: it can't even be listed without the password).</summary>
+        public static bool IsEncryptedSevenZipOrRar(string path)
+        {
+            try
+            {
+                using var archive = SharpCompress.Archives.ArchiveFactory.OpenArchive(path, new SharpCompress.Readers.ReaderOptions());
+                return archive.Entries.Any(e => e.IsEncrypted);
+            }
+            catch (SharpCompress.Common.CryptographicException)
+            {
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         public static bool IsEncryptedZip(string path)
@@ -89,58 +108,25 @@ namespace OgConverter.Services
                     return target;
                 }
 
-                case ProtectionMethod.PasswordZip:
+                case ProtectionMethod.PasswordArchive:
                 {
                     bool folder = Directory.Exists(path);
                     string clean = path.TrimEnd('\\', '/');
-                    string target = targetFor(folder ? clean + ".keep" : clean, "zip", folder ? null : "_protected");
-                    await Task.Run(() => CreatePasswordZip(clean, target, o.Password, o.ZipCipher));
+                    string format = o.ArchiveFormat is "7z" or "rar" ? o.ArchiveFormat : "zip";
+                    string target = targetFor(folder ? clean + ".keep" : clean, format, folder ? null : "_protected");
+                    await ArchiveWriter.CreateAsync(clean, target, new ArchiveOptions
+                    {
+                        Format = format,
+                        Password = o.Password,
+                        ZipCipher = o.ZipCipher,
+                        EncryptNames = o.EncryptNames,
+                        Level = o.ArchiveLevel
+                    });
                     return target;
                 }
 
                 default:
                     throw new InvalidOperationException("Unknown protection method.");
-            }
-        }
-
-        private static void CreatePasswordZip(string source, string target, string password, ZipCipher cipher)
-        {
-            string temp = target + ".partial";
-            try
-            {
-                using (var fs = File.Create(temp))
-                using (var zip = new ZipOutputStream(fs))
-                {
-                    zip.SetLevel(9);
-                    zip.Password = password;
-
-                    IEnumerable<(string File, string EntryName)> items = Directory.Exists(source)
-                        ? Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
-                            .Select(f => (f, Path.Combine(Path.GetFileName(source), Path.GetRelativePath(source, f)).Replace('\\', '/')))
-                        : new[] { (source, Path.GetFileName(source)) };
-
-                    foreach (var (file, entryName) in items)
-                    {
-                        var info = new FileInfo(file);
-                        var entry = new ZipEntry(ZipEntry.CleanName(entryName))
-                        {
-                            DateTime = info.LastWriteTime,
-                            Size = info.Length,
-                            // WinZip AES-256 (AE-2); 0 = traditional PKWARE ZipCrypto
-                            AESKeySize = cipher == ZipCipher.Aes256 ? 256 : 0
-                        };
-                        zip.PutNextEntry(entry);
-                        using (var input = File.OpenRead(file)) input.CopyTo(zip);
-                        zip.CloseEntry();
-                    }
-                    zip.Finish();
-                }
-                File.Move(temp, target, overwrite: true);
-            }
-            catch
-            {
-                try { File.Delete(temp); } catch { }
-                throw;
             }
         }
 
@@ -151,6 +137,7 @@ namespace OgConverter.Services
             LockKind.Pdf => PdfToolsService.CheckPassword(path, password),
             LockKind.Vault => FileVault.CheckPassword(path, password),
             LockKind.Zip => CheckZipPassword(path, password),
+            LockKind.SevenZipOrRar => CheckSevenZipOrRarPassword(path, password),
             _ => true // Office can only be checked by opening it; the job reports a wrong password
         };
 
@@ -183,6 +170,24 @@ namespace OgConverter.Services
                     return folder;
                 }
 
+                case LockKind.SevenZipOrRar:
+                {
+                    string folder = uniquePath(Path.Combine(outputDirectory, Path.GetFileNameWithoutExtension(path)));
+                    await Task.Run(() =>
+                    {
+                        try
+                        {
+                            ArchiveService.ExtractWithSharpCompress(path, folder, password);
+                        }
+                        catch
+                        {
+                            try { Directory.Delete(folder, true); } catch { }
+                            throw;
+                        }
+                    });
+                    return folder;
+                }
+
                 default:
                     throw new InvalidOperationException("This file isn't password-protected.");
             }
@@ -198,6 +203,24 @@ namespace OgConverter.Services
                 using var s = zip.GetInputStream(entry);
                 var buffer = new byte[81920];
                 while (s.Read(buffer, 0, buffer.Length) > 0) { } // reading to the end verifies the AES MAC / CRC
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>Decrypts the first encrypted file to the end, which checks the password against the archive's MAC / CRC.</summary>
+        private static bool CheckSevenZipOrRarPassword(string path, string password)
+        {
+            try
+            {
+                using var archive = SharpCompress.Archives.ArchiveFactory.OpenArchive(path, new SharpCompress.Readers.ReaderOptions { Password = password });
+                var entry = archive.Entries.FirstOrDefault(e => !e.IsDirectory && e.IsEncrypted);
+                if (entry == null) return true;
+                using var s = entry.OpenEntryStream();
+                s.CopyTo(Stream.Null);
                 return true;
             }
             catch

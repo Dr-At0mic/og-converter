@@ -17,6 +17,8 @@ namespace OgConverter.Services
         public const string AppName = "OG Converter";
         public const string BackgroundArg = "--background";
         public const string UninstallArg = "--uninstall";
+        /// <summary>Passed to the installed copy on its first start, so it can offer the recommended extras.</summary>
+        public const string JustInstalledArg = "--just-installed";
         private const string ExeName = "og-converter.exe";
         private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string RunValueName = "OGConverter";
@@ -42,7 +44,7 @@ namespace OgConverter.Services
             CurrentExePath != null && PathEquals(Path.GetDirectoryName(CurrentExePath), InstallDirectory);
 
         /// <summary>Release builds are one self-contained exe; dev builds are an exe plus its DLLs.</summary>
-        private static bool IsSingleFile => !File.Exists(Path.Combine(AppContext.BaseDirectory, "og-converter.dll"));
+        internal static bool IsSingleFile => !File.Exists(Path.Combine(AppContext.BaseDirectory, "og-converter.dll"));
 
         public static string CurrentVersion =>
             typeof(InstallService).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0]
@@ -129,7 +131,7 @@ namespace OgConverter.Services
 
         public static void LaunchInstalled()
         {
-            Process.Start(new ProcessStartInfo(InstalledExePath) { UseShellExecute = true, WorkingDirectory = InstallDirectory });
+            Process.Start(new ProcessStartInfo(InstalledExePath, JustInstalledArg) { UseShellExecute = true, WorkingDirectory = InstallDirectory });
         }
 
         /// <summary>
@@ -177,6 +179,18 @@ namespace OgConverter.Services
             key.SetValue("InstallDate", DateTime.Now.ToString("yyyyMMdd"));
             long kb = Directory.EnumerateFiles(InstallDirectory, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length) / 1024;
             key.SetValue("EstimatedSize", (int)Math.Min(int.MaxValue, kb), RegistryValueKind.DWord);
+        }
+
+        /// <summary>After an in-app update the installed exe is newer than its Apps &amp; features entry.</summary>
+        public static void RefreshUninstallEntryVersion()
+        {
+            if (!IsRunningInstalled) return;
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(UninstallKeyPath, writable: true);
+                if (key != null && key.GetValue("DisplayVersion") as string != CurrentVersion) key.SetValue("DisplayVersion", CurrentVersion);
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException) { }
         }
 
         /// <summary>The installed copy may be running in the tray and holding its exe open.</summary>

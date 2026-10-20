@@ -550,8 +550,8 @@
                                     <TextBlock Text="How large the wheel appears on screen" Style="{StaticResource Caption}" Margin="0,2,0,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <TextBlock x:Name="WheelScaleText" Text="100%" Style="{StaticResource Caption}" Width="110" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" />
-                                    <Slider x:Name="WheelScaleSlider" Width="200" Minimum="0.40" Maximum="1.35" Value="1.0" SmallChange="0.05" LargeChange="0.1"
+                                    <TextBlock x:Name="WheelScaleText" Text="45%" Style="{StaticResource Caption}" Width="110" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" />
+                                    <Slider x:Name="WheelScaleSlider" Width="200" Minimum="0.40" Maximum="1.35" Value="0.45" SmallChange="0.05" LargeChange="0.1"
                                             VerticalAlignment="Center" ValueChanged="OnWheelScaleSliderChanged" />
                                 </StackPanel>
                             </Grid>
@@ -637,6 +637,35 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE895;" Style="{StaticResource Icon}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="UpdateTitleText" Text="Updates" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="UpdateStatusText" Style="{StaticResource Caption}" Margin="0,2,24,0" TextWrapping="Wrap" />
+                                    <ProgressBar x:Name="UpdateProgress" Visibility="Collapsed" Height="4" Margin="0,10,24,0" Minimum="0" Maximum="1"
+                                                 BorderThickness="0" Foreground="{DynamicResource AccentBrush}" Background="{DynamicResource SurfaceRaisedBrush}" />
+                                    <Border x:Name="UpdateNotesPanel" Visibility="Collapsed" Margin="0,12,24,0" Padding="14,12"
+                                            Background="{DynamicResource AccentFaintBrush}" CornerRadius="{DynamicResource ControlRadius}">
+                                        <StackPanel>
+                                            <TextBlock x:Name="UpdateNotesTitle" Style="{StaticResource Overline}" Margin="0,0,0,8" />
+                                            <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                                <TextBlock x:Name="UpdateNotesText" Style="{StaticResource Caption}" FontSize="13" LineHeight="20" TextWrapping="Wrap" />
+                                            </ScrollViewer>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                    <Button x:Name="UpdateReleasePageButton" Style="{StaticResource GhostButton}" Content="Release page" Click="OnUpdateReleasePageClick"
+                                            Margin="0,0,8,0" Visibility="Collapsed" />
+                                    <Button x:Name="UpdateButton" Style="{StaticResource AccentButton}" Content="Check for updates" Click="OnUpdateClick" Padding="16,7" />
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource RowDivider}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock Text="&#xE7E8;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Start with Windows" FontWeight="SemiBold" />
@@ -663,7 +692,7 @@
                                     <TextBlock Text="Shortcut hints under the wheel" FontWeight="SemiBold" />
                                     <TextBlock Text="The Shift · Ctrl · Alt · Esc bar. Turn it off once you know the keys for a cleaner, smaller wheel." Style="{StaticResource Caption}" Margin="0,2,24,0" />
                                 </StackPanel>
-                                <CheckBox x:Name="ShowKeyHintsCheck" Grid.Column="2" Style="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center"
+                                <CheckBox x:Name="ShowKeyHintsCheck" Grid.Column="2" Style="{StaticResource ToggleSwitch}" IsChecked="False" VerticalAlignment="Center"
                                           Checked="OnSettingChanged" Unchecked="OnSettingChanged" />
                             </Grid>
                             <Border Style="{StaticResource RowDivider}" />
@@ -697,11 +726,15 @@
                                 <TextBlock Text="&#xE714;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="FFmpeg" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="FFmpegPathText" Text="Optional. Used for video, audio, GIF, WebP, AVIF and JPEG XL" Style="{StaticResource Caption}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                    <TextBlock x:Name="FFmpegPathText" Text="Optional. Used for video, audio, GIF, WebP, AVIF and JPEG XL" Style="{StaticResource Caption}" Margin="0,2,24,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                                 </StackPanel>
-                                <Border x:Name="FFmpegBadge" Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center" BorderThickness="0">
-                                    <TextBlock x:Name="FFmpegStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
-                                </Border>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="InstallFFmpegButton" Style="{StaticResource AccentButton}" Content="Install" Click="OnInstallFFmpegClick"
+                                            Margin="0,0,10,0" Visibility="Collapsed" ToolTip="Installs FFmpeg with winget (free, no admin rights needed)" />
+                                    <Border x:Name="FFmpegBadge" CornerRadius="12" Padding="10,4" VerticalAlignment="Center" BorderThickness="0">
+                                        <TextBlock x:Name="FFmpegStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
+                                    </Border>
+                                </StackPanel>
                             </Grid>
                             <Border Style="{StaticResource RowDivider}" />
                             <Grid Style="{StaticResource SettingRow}">
@@ -713,10 +746,30 @@
                                 <TextBlock Text="&#xE8F1;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Office documents" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="DocEngineText" Text="Optional. Word, Excel and PowerPoint formats, plus OpenDocument" Style="{StaticResource Caption}" Margin="0,2,0,0" />
+                                    <TextBlock x:Name="DocEngineText" Text="Optional. Word, Excel and PowerPoint formats, plus OpenDocument" Style="{StaticResource Caption}" Margin="0,2,24,0" />
                                 </StackPanel>
-                                <Border x:Name="DocEngineBadge" Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
-                                    <TextBlock x:Name="DocEngineStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button x:Name="InstallLibreOfficeButton" Style="{StaticResource AccentButton}" Content="Install LibreOffice (free)" Click="OnInstallLibreOfficeClick"
+                                            Margin="0,0,10,0" Visibility="Collapsed" ToolTip="Free and opens Microsoft Office files. Installs with winget; Windows asks for admin permission once." />
+                                    <Border x:Name="DocEngineBadge" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
+                                        <TextBlock x:Name="DocEngineStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+                            <Border Style="{StaticResource RowDivider}" />
+                            <Grid Style="{StaticResource SettingRow}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="&#xE774;" Style="{StaticResource Icon}" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Web browser" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="BrowserEngineText" Text="Markdown, web pages and SVG. Edge comes with Windows." Style="{StaticResource Caption}" Margin="0,2,24,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                                </StackPanel>
+                                <Border x:Name="BrowserBadge" Grid.Column="2" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
+                                    <TextBlock x:Name="BrowserStatusText" Text="Checking…" FontSize="11.5" FontWeight="SemiBold" />
                                 </Border>
                             </Grid>
                             <Border Style="{StaticResource RowDivider}" />
@@ -749,6 +802,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <Border Width="56" Height="56" CornerRadius="14" Margin="0,0,18,0">
                             <Border.Background>
@@ -761,7 +815,24 @@
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Text="OG Converter" Style="{StaticResource H1}" />
-                            <TextBlock Style="{StaticResource Caption}" Margin="0,4,0,0" Text="Version 1.0  ·  Offline file conversion for Windows" />
+                            <!-- Filled from the assembly version, which the release workflow stamps from the tag -->
+                            <TextBlock x:Name="AboutVersionText" Style="{StaticResource Caption}" Margin="0,4,0,0" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Style="{StaticResource GhostButton}" Click="OnOpenReleaseNotesClick" Margin="0,0,8,0"
+                                    ToolTip="What changed in this version">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8A5;" Style="{StaticResource Icon}" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="Release notes" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource AccentButton}" Click="OnOpenRepoClick" Padding="16,7"
+                                    ToolTip="https://github.com/Dr-At0mic/og-converter">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE943;" Style="{StaticResource Icon}" FontSize="14" Foreground="{DynamicResource OnAccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                    <TextBlock Text="Source code" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Grid>
 
@@ -797,7 +868,7 @@
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Native Windows app on .NET 10 and WPF" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Low-level keyboard and mouse hooks for the drag gesture" />
                                 <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Explorer shell automation to find the dragged file" />
-                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Uses FFmpeg, Office or LibreOffice, and Edge if they're on your PC. It never installs them." />
+                                <TextBlock Style="{StaticResource Caption}" Margin="0,0,0,8" Text="Uses FFmpeg, Office or LibreOffice, and Edge if they're on your PC. It only installs them when you ask." />
                                 <TextBlock Style="{StaticResource Caption}" Text="Windows today. A Linux version is on the way." />
                             </StackPanel>
                         </Border>
@@ -848,22 +919,26 @@
                                             <Hyperlink NavigateUri="https://dr-at0mic.github.io/" RequestNavigate="OnLinkRequestNavigate"
                                                        Foreground="{DynamicResource AccentBrush}" TextDecorations="{x:Null}"
                                                        ToolTip="https://dr-at0mic.github.io/">Portfolio ↗</Hyperlink>
+                                            <Run Text="  ·  " Foreground="{DynamicResource TextTertiaryBrush}" />
+                                            <Hyperlink NavigateUri="https://github.com/Dr-At0mic" RequestNavigate="OnLinkRequestNavigate"
+                                                       Foreground="{DynamicResource AccentBrush}" TextDecorations="{x:Null}"
+                                                       ToolTip="https://github.com/Dr-At0mic">GitHub ↗</Hyperlink>
                                         </TextBlock>
                                     </StackPanel>
                                 </StackPanel>
 
-                                <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                                <StackPanel Orientation="Horizontal">
                                     <Border Style="{StaticResource DevAvatar}">
                                         <TextBlock Text="MP" Style="{StaticResource DevInitials}" />
                                     </Border>
-                                    <TextBlock Text="Mahesh P S" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
-                                </StackPanel>
-
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Style="{StaticResource DevAvatar}">
-                                        <TextBlock Text="BP" Style="{StaticResource DevInitials}" />
-                                    </Border>
-                                    <TextBlock Text="Bijo Prasad" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Mahesh P S" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        <TextBlock FontSize="12" Margin="0,2,0,0">
+                                            <Hyperlink NavigateUri="https://github.com/Yet-Zio" RequestNavigate="OnLinkRequestNavigate"
+                                                       Foreground="{DynamicResource AccentBrush}" TextDecorations="{x:Null}"
+                                                       ToolTip="https://github.com/Yet-Zio">GitHub ↗</Hyperlink>
+                                        </TextBlock>
+                                    </StackPanel>
                                 </StackPanel>
                             </UniformGrid>
                         </StackPanel>

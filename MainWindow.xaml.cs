@@ -52,6 +52,8 @@ namespace OgConverter
             SetupPlaygroundWheelInteraction();
             SetupTemplates();
             RefreshInstallState();
+            SetupUpdates();
+            SetupExtrasPrompt();
 
             StateChanged += (_, _) => UpdateMaximizeState();
 
@@ -127,6 +129,17 @@ namespace OgConverter
             DocEngineStatusText.SetResourceReference(TextBlock.ForegroundProperty, docs ? "SuccessBrush" : "WarningBrush");
             DocEngineBadge.SetResourceReference(Border.BackgroundProperty, docs ? "SuccessSubtleBrush" : "WarningSubtleBrush");
             DocEngineText.Text = docs ? "Using " + DocumentEngine.DescribeBackends() : DocumentEngine.LibreOfficeInstallHint;
+
+            InstallFFmpegButton.Visibility = ok ? Visibility.Collapsed : Visibility.Visible;
+            InstallLibreOfficeButton.Visibility = docs ? Visibility.Collapsed : Visibility.Visible;
+
+            // Status only: Edge ships with Windows
+            bool browser = BrowserRenderService.IsAvailable;
+            BrowserStatusText.Text = browser ? "Ready" : "Not found";
+            BrowserStatusText.SetResourceReference(TextBlock.ForegroundProperty, browser ? "SuccessBrush" : "WarningBrush");
+            BrowserBadge.SetResourceReference(Border.BackgroundProperty, browser ? "SuccessSubtleBrush" : "WarningSubtleBrush");
+            BrowserEngineText.Text = browser ? BrowserRenderService.BrowserPath : BrowserRenderService.MissingBrowserHint;
+            BrowserEngineText.ToolTip = browser ? BrowserRenderService.BrowserPath : null;
         }
 
         private void SetupGlobalHooks()
@@ -214,11 +227,12 @@ namespace OgConverter
             }
 
             // Conversions and tools can take minutes (video): show live progress in Recent activity and a toast
-            // until the result replaces them. Actions are instant and skip this.
+            // until the result replaces them. Actions are instant and skip this, except packing an archive or a
+            // password archive, which can take as long as a conversion.
             ToastNotificationWindow? progressToast = null;
             ConversionJob? running = null;
             IProgress<double>? progress = null;
-            if (option.Mode != WheelMode.Actions)
+            if (option.Mode != WheelMode.Actions || option.Id is "act_zip" or "act_protect")
             {
                 running = new ConversionJob { SourcePath = filePath, Option = option, TargetFormat = option.Title, IsRunning = true };
                 _history.Insert(0, running);
@@ -227,6 +241,8 @@ namespace OgConverter
                 if (_settingsService.Current.ShowToastOnComplete)
                 {
                     string title = option.Id == ConversionEngine.CompressToolId ? "Compressing…"
+                                 : option.Id == "act_zip" ? "Creating archive…"
+                                 : option.Id == "act_protect" ? "Protecting…"
                                  : option.Mode == WheelMode.Convert ? $"Converting to {option.Title}…"
                                  : $"{option.Title}…";
                     progressToast = _notifyService.ShowProgress(title, filePath);
@@ -277,6 +293,20 @@ namespace OgConverter
                     settings.LastCompression[key] = dlg.Result;
                     _settingsService.SaveSettings(settings);
                     parameters = new ToolParameters { Compression = dlg.Result };
+                    return true;
+                }
+
+                case "act_zip":
+                {
+                    var settings = _settingsService.Current;
+                    var dlg = new ArchiveDialog(filePath, settings.LastArchive);
+                    if (dlg.ShowDialog() != true || dlg.Result == null) return false;
+                    // Remember the choices, never the password
+                    var remembered = dlg.Result.Clone();
+                    remembered.Password = string.Empty;
+                    settings.LastArchive = remembered;
+                    _settingsService.SaveSettings(settings);
+                    parameters = new ToolParameters { Archive = dlg.Result };
                     return true;
                 }
 

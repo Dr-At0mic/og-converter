@@ -99,7 +99,7 @@ namespace OgConverter.Tests
             await File.WriteAllTextAsync(Path.Combine(folder, "sub", "data.csv"), "a,b\n1,2");
             foreach (var cipher in new[] { ZipCipher.Aes256, ZipCipher.ZipCrypto })
             {
-                string zip = await Protect(folder, new ProtectionOptions { Method = ProtectionMethod.PasswordZip, Password = "zip-pass", ZipCipher = cipher }, $"ZIP folder {cipher}");
+                string zip = await Protect(folder, new ProtectionOptions { Method = ProtectionMethod.PasswordArchive, Password = "zip-pass", ZipCipher = cipher }, $"ZIP folder {cipher}");
                 if (!ProtectionService.IsEncryptedZip(zip)) throw new Exception("Zip entries are not encrypted");
                 if (ProtectionService.CheckPassword(zip, "wrong")) throw new Exception("Wrong zip password accepted");
                 string extracted = await Unlock(zip, "zip-pass", $"ZIP folder {cipher}");
@@ -107,7 +107,28 @@ namespace OgConverter.Tests
                 if (await File.ReadAllTextAsync(readme) != "top secret") throw new Exception("Zip round-trip content differs");
                 File.Delete(zip);
             }
-            await Protect(testPdf, new ProtectionOptions { Method = ProtectionMethod.PasswordZip, Password = "z" }, "ZIP single file AES-256");
+            await Protect(testPdf, new ProtectionOptions { Method = ProtectionMethod.PasswordArchive, Password = "z" }, "ZIP single file AES-256");
+
+            // --- Password 7z and RAR (when 7-Zip / WinRAR are installed), names hidden or not
+            foreach (var (format, available) in new[] { ("7z", DependencyService.SevenZipPath != null), ("rar", DependencyService.RarPath != null) })
+            {
+                if (!available)
+                {
+                    Console.WriteLine($"     ({format}: tool not installed, skipped)");
+                    continue;
+                }
+                foreach (bool hideNames in new[] { true, false })
+                {
+                    string label = $"{format.ToUpperInvariant()} folder{(hideNames ? ", names hidden" : "")}";
+                    string archive = await Protect(folder, new ProtectionOptions { Method = ProtectionMethod.PasswordArchive, ArchiveFormat = format, EncryptNames = hideNames, Password = "arc-pass" }, label);
+                    if (Path.GetExtension(archive) != "." + format) throw new Exception($"{label}: wrong extension {archive}");
+                    if (ProtectionService.CheckPassword(archive, "wrong")) throw new Exception($"{label}: wrong password accepted");
+                    await Unlock(archive, "wrong", label + " (wrong password)", expectSuccess: false);
+                    string extracted = await Unlock(archive, "arc-pass", label);
+                    if (await File.ReadAllTextAsync(Path.Combine(extracted, "Project Files", "sub", "data.csv")) != "a,b\n1,2") throw new Exception($"{label}: round-trip content differs");
+                    File.Delete(archive);
+                }
+            }
 
             // --- Wheel shows Unlock for protected files
             string anyVault = await Protect(big, new ProtectionOptions { Method = ProtectionMethod.EncryptedFile, Password = "w" }, "OGX for wheel check");

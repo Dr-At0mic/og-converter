@@ -20,6 +20,7 @@ namespace OgConverter.Services
         private static readonly Lazy<string?> Browser = new(FindBrowser);
 
         public static bool IsAvailable => Browser.Value != null;
+        public static string? BrowserPath => Browser.Value;
 
         public const string MissingBrowserHint = "Microsoft Edge or Google Chrome is needed for this (Edge comes with Windows).";
 
