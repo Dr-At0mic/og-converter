@@ -173,7 +173,9 @@ namespace OgConverter.Views
             {
                 _timer.Stop();
                 int version = ++_version;
-                var frame = await MediaEditService.GetVideoFrameAsync(_ffmpeg, _path, _pending, PreviewWidth);
+                BgraImage? frame;
+                try { frame = await MediaEditService.GetVideoFrameAsync(_ffmpeg, _path, _pending, PreviewWidth); }
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or InvalidDataException) { frame = null; }
                 if (version != _version) return;
                 _image.Source = frame?.ToBitmap();
                 _status.Text = frame == null ? "No frame here" : "";

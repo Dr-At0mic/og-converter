@@ -153,6 +153,10 @@ namespace OgConverter
 
         private void SetupTitleBar()
         {
+            // The app draws its own caption buttons only where the window really extends into the title bar; elsewhere
+            // the window manager's title bar has them already
+            Opened += (_, _) => CaptionButtons.IsVisible = IsExtendedIntoWindowDecorations;
+
             // The title bar is drawn by the app (like on Windows): drag it to move, double-click to maximize
             TitleBar.PointerPressed += (_, e) =>
             {
@@ -185,6 +189,9 @@ namespace OgConverter
         private void OnCloseWindowClick(object? sender, RoutedEventArgs e) => Close();
 
         private void OnMinimizeToTrayClick(object? sender, RoutedEventArgs e) => Hide();
+
+        /// <summary>Without a tray host, hiding would leave no way back: the App hides the button.</summary>
+        public void SetTrayAvailable(bool available) => TrayButton.IsVisible = available;
 
         private void OnTabNavChanged(object? sender, RoutedEventArgs e)
         {

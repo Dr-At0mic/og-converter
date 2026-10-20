@@ -121,7 +121,9 @@ namespace OgConverter.Views
         private async Task LoadFrameAsync(double seconds)
         {
             int request = ++_frameRequest;
-            var frame = await MediaEditService.GetVideoFrameAsync(_ffmpeg!, _path, seconds);
+            BgraImage? frame;
+            try { frame = await MediaEditService.GetVideoFrameAsync(_ffmpeg!, _path, seconds); }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException or InvalidDataException) { return; }
             // A newer request may have finished first while the slider kept moving
             if (frame != null && request == _frameRequest) Cropper.ReplaceFrame(frame.ToBitmap());
         }

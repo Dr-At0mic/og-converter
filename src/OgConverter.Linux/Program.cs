@@ -42,6 +42,11 @@ namespace OgConverter
                 return Task.Run(() => CommandLine.ConvertAsync(args)).GetAwaiter().GetResult();
             }
 
+            if (args.Length > 1 && args[0] == "--snapshot")
+            {
+                return Tests.SnapshotRunner.Run(args[1]);
+            }
+
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
 

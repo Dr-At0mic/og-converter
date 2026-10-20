@@ -75,6 +75,7 @@ namespace OgConverter
         private async System.Threading.Tasks.Task CheckTrayHostAsync(bool startedHidden)
         {
             _hasTrayHost = await TrayService.IsHostAvailableAsync();
+            _main?.SetTrayAvailable(_hasTrayHost);
             // Started hidden with nowhere to hide: nothing would show the app, so show the dashboard instead
             if (startedHidden && !_hasTrayHost && !WheelController.StartedForWheel) ShowDashboard();
         }

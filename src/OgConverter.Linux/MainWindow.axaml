@@ -108,12 +108,15 @@
                     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
                         <Button Theme="{StaticResource IconButton}" Content="{c:Icon E768}" Click="OnTestWheelClick" ToolTip.Tip="Preview the wheel"
                                 Margin="0,7,2,0" />
-                        <Button Theme="{StaticResource IconButton}" Content="{c:Icon E8A0}" Click="OnMinimizeToTrayClick" ToolTip.Tip="Hide to the system tray (keeps running)"
+                        <Button x:Name="TrayButton" Theme="{StaticResource IconButton}" Content="{c:Icon E8A0}" Click="OnMinimizeToTrayClick" ToolTip.Tip="Hide to the system tray (keeps running)"
                                 Margin="0,7,10,0" />
-                        <Border Width="1" Height="18" Background="{DynamicResource BorderBrush}" VerticalAlignment="Top" Margin="0,13,4,0" />
-                        <Button Theme="{StaticResource CaptionButton}" Content="{c:Icon E921}" Click="OnMinimizeWindowClick" ToolTip.Tip="Minimize" />
-                        <Button x:Name="MaximizeBtn" Theme="{StaticResource CaptionButton}" Content="{c:Icon E922}" Click="OnMaximizeWindowClick" ToolTip.Tip="Maximize" />
-                        <Button Theme="{StaticResource CaptionCloseButton}" Content="{c:Icon E8BB}" Click="OnCloseWindowClick" ToolTip.Tip="Close" />
+                        <!-- Hidden when the window manager draws its own title bar (X11 / XWayland can't extend into it) -->
+                        <StackPanel x:Name="CaptionButtons" Orientation="Horizontal">
+                            <Border Width="1" Height="18" Background="{DynamicResource BorderBrush}" VerticalAlignment="Top" Margin="0,13,4,0" />
+                            <Button Theme="{StaticResource CaptionButton}" Content="{c:Icon E921}" Click="OnMinimizeWindowClick" ToolTip.Tip="Minimize" />
+                            <Button x:Name="MaximizeBtn" Theme="{StaticResource CaptionButton}" Content="{c:Icon E922}" Click="OnMaximizeWindowClick" ToolTip.Tip="Maximize" />
+                            <Button Theme="{StaticResource CaptionCloseButton}" Content="{c:Icon E8BB}" Click="OnCloseWindowClick" ToolTip.Tip="Close" />
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
             </Border>
