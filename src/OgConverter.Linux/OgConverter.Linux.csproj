@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The Linux app: an Avalonia UI over OgConverter.Core. Linux implementations of the platform services live in
+    Platform/Linux and are registered first thing in Program.Main.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>og-converter</AssemblyName>
+    <RootNamespace>OgConverter</RootNamespace>
+    <Product>OG Converter</Product>
+    <!-- Release workflow overrides this from the tag (v1.2.3 → 1.2.3) -->
+    <Version>1.0.0</Version>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>..\OgConverter.Windows\Assets\og-converter.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OgConverter.Core\OgConverter.Core.csproj" />
+  </ItemGroup>
+
+</Project>
