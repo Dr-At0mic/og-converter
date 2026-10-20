@@ -1,18 +1,15 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using System.Windows;
 using OgConverter.Models;
-using OgConverter.Platform.Windows;
 using OgConverter.Services;
-using OgConverter.Views;
 
 namespace OgConverter.Tests
 {
     /// <summary>Crop (images, animated GIF, video), Trim (precise and fast) and SHA-256 results.</summary>
     public static class EditVerification
     {
-        public static async Task RunAsync(ConversionEngine engine, AppSettings settings, string tempDir, string testPng)
+        public static async Task RunAsync(ConversionEngine engine, AppSettings settings, string tempDir, string testPng, PlatformSelfTests platform)
         {
             Console.WriteLine("[20] Crop / Trim");
 
@@ -31,7 +28,7 @@ namespace OgConverter.Tests
                     if (!conv.IsSuccess) { Console.WriteLine($"     (skip {ext}: {conv.ErrorMessage})"); continue; }
                     src = conv.TargetPath;
                 }
-                var job = await Crop(engine, settings, src, new Int32Rect(10, 20, 50, 40));
+                var job = await Crop(engine, settings, src, new PixelRect(10, 20, 50, 40));
                 var size = ImageSize(job.TargetPath);
                 Console.WriteLine($"     Crop {ext,-5} Success={job.IsSuccess} {Path.GetFileName(job.TargetPath)} {size.Width}x{size.Height} {job.ErrorMessage}");
                 if (!job.IsSuccess || size != (50, 40) || !job.TargetPath.EndsWith("." + ext, StringComparison.OrdinalIgnoreCase))
@@ -47,7 +44,7 @@ namespace OgConverter.Tests
             // Animated GIF keeps its frames
             string gif = Path.Combine(tempDir, "anim.gif");
             await MediaToolkit.RunAsync(engine.FFmpegPath, new[] { "-f", "lavfi", "-i", "testsrc=size=160x120:rate=5:duration=1", gif });
-            var gifJob = await Crop(engine, settings, gif, new Int32Rect(20, 10, 80, 60));
+            var gifJob = await Crop(engine, settings, gif, new PixelRect(20, 10, 80, 60));
             var gifInfo = await MediaToolkit.ProbeAsync(engine.FFmpegPath, gifJob.TargetPath);
             int frames = await CountFramesAsync(gifJob.TargetPath);
             Console.WriteLine($"     Crop gif   Success={gifJob.IsSuccess} {gifInfo.Width}x{gifInfo.Height}, {frames} frames {gifJob.ErrorMessage}");
@@ -59,7 +56,7 @@ namespace OgConverter.Tests
                 "-f", "lavfi", "-i", "sine=frequency=440:duration=6", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", video });
 
             // Odd sizes are rounded down to even for 4:2:0
-            var cropJob = await Crop(engine, settings, video, new Int32Rect(11, 21, 101, 81));
+            var cropJob = await Crop(engine, settings, video, new PixelRect(11, 21, 101, 81));
             var cropInfo = await MediaToolkit.ProbeAsync(engine.FFmpegPath, cropJob.TargetPath);
             Console.WriteLine($"     Crop mp4   Success={cropJob.IsSuccess} {cropInfo.Width}x{cropInfo.Height} audio={cropInfo.HasAudio} {cropJob.ErrorMessage}");
             if (!cropJob.IsSuccess || cropInfo.Width != 100 || cropInfo.Height != 80 || !cropInfo.HasAudio) throw new Exception("Video crop failed");
@@ -79,15 +76,11 @@ namespace OgConverter.Tests
                 new ToolParameters { TrimStart = 3, TrimEnd = 3 });
             if (bad.IsSuccess) throw new Exception("An empty trim should be rejected");
 
-            foreach (var (text, expected) in new[] { ("65.5", 65.5), ("1:05", 65.0), ("1:02:03", 3723.0) })
-            {
-                if (!TrimDialog.TryParseTime(text, out double t) || Math.Abs(t - expected) > 0.001) throw new Exception($"Time '{text}' parsed as {t}");
-            }
-            if (TrimDialog.TryParseTime("abc", out _)) throw new Exception("Invalid time accepted");
+            platform.EditDialogs?.Invoke();
         }
 
-        private static Task<ConversionJob> Crop(ConversionEngine engine, AppSettings settings, string src, Int32Rect rect) =>
-            engine.ExecuteAsync(src, new WheelItem { Id = "tool_crop", Title = "Crop", Mode = WheelMode.Tools }, settings, new ToolParameters { Crop = rect.ToPixelRect() });
+        private static Task<ConversionJob> Crop(ConversionEngine engine, AppSettings settings, string src, PixelRect rect) =>
+            engine.ExecuteAsync(src, new WheelItem { Id = "tool_crop", Title = "Crop", Mode = WheelMode.Tools }, settings, new ToolParameters { Crop = rect });
 
         private static (int Width, int Height) ImageSize(string path)
         {
@@ -95,11 +88,6 @@ namespace OgConverter.Tests
             return img == null ? (0, 0) : (img.Bitmap.Width, img.Bitmap.Height);
         }
 
-        private static Task<int> CountFramesAsync(string gif) => Task.Run(() =>
-        {
-            using var fs = File.OpenRead(gif);
-            return new System.Windows.Media.Imaging.GifBitmapDecoder(fs, System.Windows.Media.Imaging.BitmapCreateOptions.None,
-                System.Windows.Media.Imaging.BitmapCacheOption.None).Frames.Count;
-        });
+        private static Task<int> CountFramesAsync(string gif) => Task.Run(() => Platform.Images.CountGifFrames(gif));
     }
 }

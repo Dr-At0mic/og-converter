@@ -39,7 +39,9 @@ namespace OgConverter.Services
         /// <summary>Release builds are one self-contained exe that can replace itself; dev builds only link to the release page.</summary>
         public static bool CanSelfUpdate => Platform.IsSingleFileBuild && CurrentExePath != null;
 
-        private static string? CurrentExePath => Environment.ProcessPath;
+        /// <summary>The file to replace: the exe, or on Linux the AppImage the app runs from (its runtime sets APPIMAGE).</summary>
+        private static string? CurrentExePath =>
+            !OperatingSystem.IsWindows() && Environment.GetEnvironmentVariable("APPIMAGE") is { Length: > 0 } appImage ? appImage : Environment.ProcessPath;
 
         public static string ReleasePageFor(string version) => $"{ReleasesUrl}/tag/v{version}";
 
@@ -95,7 +97,9 @@ namespace OgConverter.Services
         /// </summary>
         public static async Task<string> DownloadAsync(ReleaseInfo release, IProgress<double> progress, CancellationToken ct)
         {
-            if (release.ExeUrl == null || release.ShaUrl == null) throw new InvalidOperationException("This release has no Windows download. Get it from the release page.");
+            if (release.ExeUrl == null || release.ShaUrl == null) throw new InvalidOperationException(OperatingSystem.IsWindows()
+                ? "This release has no Windows download. Get it from the release page."
+                : "This release has no download for this system. Get it from the release page.");
             string exe = CurrentExePath ?? throw new InvalidOperationException("Can't find this program's file.");
             string target = exe + NewSuffix;
 
@@ -127,6 +131,8 @@ namespace OgConverter.Services
                     actual = Convert.ToHexString(await SHA256.HashDataAsync(check, ct)).ToLowerInvariant();
                 }
                 if (actual != expected) throw new InvalidOperationException("The download doesn't match the published checksum, so it wasn't installed. Try again.");
+                // Downloads aren't executable on Linux until marked so
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(target, File.GetUnixFileMode(exe) | UnixFileMode.UserExecute);
                 return target;
             }
             catch

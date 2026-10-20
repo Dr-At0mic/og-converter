@@ -216,7 +216,7 @@ namespace OgConverter.Services
                 {
                     if (string.IsNullOrEmpty(entry.Key)) continue;
                     string dest = Path.GetFullPath(Path.Combine(destDir, entry.Key));
-                    if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!dest.StartsWith(root, Platform.PathComparison)) continue;
 
                     if (entry.IsDirectory)
                     {

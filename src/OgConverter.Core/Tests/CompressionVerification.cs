@@ -5,8 +5,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using OgConverter.Models;
 using OgConverter.Services;
 using PdfSharp.Drawing;
@@ -72,7 +70,7 @@ namespace OgConverter.Tests
 
                 string palette = (await Run(photoPng, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "keep", Quality = 80 }, "PNG lossy (palette, 208 colors)"))!;
                 var pal = Decode(palette);
-                if (pal.Format != PixelFormats.Indexed8 && pal.Palette == null) throw new Exception($"Palette PNG is {pal.Format}, expected 8-bit indexed");
+                if (!pal.HasPalette) throw new Exception($"Palette PNG is {pal.Format}, expected 8-bit indexed");
 
                 foreach (string fmt in new[] { "webp", "avif", "jxl", "jpg" })
                 {
@@ -98,27 +96,27 @@ namespace OgConverter.Tests
             // JPEG with EXIF orientation 6 (rotated 90°) and camera/GPS-ish metadata
             string camJpg = Path.Combine(dir, "camera.jpg");
             SaveJpegWithExif(CreatePhoto(1200, 800, alpha: false), camJpg, orientation: 6);
-            if (ImageCodec.ReadOrientation(ReadMetadata(camJpg)) != 6) throw new Exception("Test JPEG should carry orientation 6");
+            if (Orientation(camJpg) != 6) throw new Exception("Test JPEG should carry orientation 6");
 
             string stripped = (await Run(camJpg, new CompressionOptions { Mode = CompressionMode.Lossless, Format = "keep", StripMetadata = true }, "JPEG lossless (metadata removed)"))!;
             AssertSamePixels(camJpg, stripped, "metadata-stripped JPEG");
-            var strippedMeta = ReadMetadata(stripped);
-            if (ImageCodec.ReadOrientation(strippedMeta) != 6) throw new Exception("Lossless JPEG lost its orientation");
-            if (strippedMeta != null && (SafeQuery(strippedMeta, "/app1/ifd/{ushort=271}") != null || SafeQuery(strippedMeta, "/app1/ifd/{ushort=305}") != null))
+            var strippedMeta = JpegExif.Read(File.ReadAllBytes(stripped));
+            if (Orientation(stripped) != 6) throw new Exception("Lossless JPEG lost its orientation");
+            if (JpegExif.ReadText(strippedMeta, JpegExif.MakeTag) != null || JpegExif.ReadText(strippedMeta, JpegExif.SoftwareTag) != null)
                 throw new Exception("Lossless JPEG still contains camera make/software");
 
             string rotated = (await Run(camJpg, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "keep", Quality = 70 }, "JPEG lossy q70 (rotation applied)"))!;
             var rot = Decode(rotated);
-            if (rot.PixelWidth != 800 || rot.PixelHeight != 1200) throw new Exception($"Lossy JPEG should be upright 800x1200, got {rot.PixelWidth}x{rot.PixelHeight}");
-            if (ImageCodec.ReadOrientation(ReadMetadata(rotated)) != 1) throw new Exception("Upright JPEG must not keep a rotation tag");
+            if (rot.Width != 800 || rot.Height != 1200) throw new Exception($"Lossy JPEG should be upright 800x1200, got {rot.Width}x{rot.Height}");
+            if (Orientation(rotated) != 1) throw new Exception("Upright JPEG must not keep a rotation tag");
 
             string bmp = Path.Combine(dir, "scan.bmp");
-            Save(new BmpBitmapEncoder(), CreatePhoto(640, 480, alpha: false, noise: false), bmp);
+            Save(ImageEncoding.Bmp(), CreatePhoto(640, 480, alpha: false, noise: false), bmp);
             string bmpPng = (await Run(bmp, new CompressionOptions { Mode = CompressionMode.Lossless, Format = "png" }, "BMP lossless → PNG"))!;
             AssertSamePixels(bmp, bmpPng, "BMP → PNG");
 
             string tiff = Path.Combine(dir, "scan.tiff");
-            Save(new TiffBitmapEncoder { Compression = TiffCompressOption.None }, CreatePhoto(640, 480, alpha: false, noise: false), tiff);
+            Save(ImageEncoding.Tiff() with { Uncompressed = true }, CreatePhoto(640, 480, alpha: false, noise: false), tiff);
             string tiffZip = (await Run(tiff, new CompressionOptions { Mode = CompressionMode.Lossless, Format = "keep" }, "TIFF lossless (Deflate)"))!;
             AssertSamePixels(tiff, tiffZip, "Deflate TIFF");
 
@@ -224,7 +222,7 @@ namespace OgConverter.Tests
             string bigPng = Path.Combine(dir, "pdf_chart.png");
             SavePng(CreatePhoto(1800, 1200, alpha: false), bigPng);
             string pdf = Path.Combine(dir, "brochure.pdf");
-            PdfSharp.Fonts.GlobalFontSettings.UseWindowsFontsUnderWindows = true;
+            PdfFonts.EnsureConfigured();
             using (var doc = new PdfDocument())
             {
                 doc.Info.Author = "Jane Doe";
@@ -264,9 +262,9 @@ namespace OgConverter.Tests
                 original.Dispose();
                 using (var img = z.GetEntry("word/media/image1.jpg")!.Open())
                 {
-                    var ms = new MemoryStream(); img.CopyTo(ms); ms.Position = 0;
-                    var f = BitmapDecoder.Create(ms, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
-                    if (Math.Max(f.PixelWidth, f.PixelHeight) != 1280) throw new Exception($"DOCX picture not resized: {f.PixelWidth}x{f.PixelHeight}");
+                    var ms = new MemoryStream(); img.CopyTo(ms);
+                    var f = Platform.Images.Decode(ms.ToArray());
+                    if (Math.Max(f.Width, f.Height) != 1280) throw new Exception($"DOCX picture not resized: {f.Width}x{f.Height}");
                 }
                 string core = new StreamReader(z.GetEntry("docProps/core.xml")!.Open()).ReadToEnd();
                 if (core.Contains("Jane Doe")) throw new Exception("DOCX author not removed");
@@ -325,7 +323,7 @@ namespace OgConverter.Tests
         // ---------- Fixtures ----------
 
         /// <summary>A photo-like image: smooth gradients plus fine noise (hard for lossless, easy for lossy).</summary>
-        private static BitmapSource CreatePhoto(int w, int h, bool alpha, bool noise = true)
+        private static RasterImage CreatePhoto(int w, int h, bool alpha, bool noise = true)
         {
             var rnd = new Random(42);
             var px = new byte[w * h * 4];
@@ -347,64 +345,38 @@ namespace OgConverter.Tests
                     else px[i + 3] = 255;
                 }
             }
-            var bmp = BitmapSource.Create(w, h, 96, 96, alpha ? PixelFormats.Bgra32 : PixelFormats.Bgr32, null, px, w * 4);
-            BitmapSource result = alpha ? bmp : new FormatConvertedBitmap(bmp, PixelFormats.Bgr24, null, 0);
-            result.Freeze();
-            return result;
+            var bmp = Platform.Images.FromPixels(w, h, 96, alpha ? RasterFormat.Bgra32 : RasterFormat.Bgr32, px, w * 4);
+            return alpha ? bmp : Platform.Images.ConvertFormat(bmp, RasterFormat.Bgr24);
         }
 
-        private static void SavePng(BitmapSource bmp, string path) => Save(new PngBitmapEncoder(), bmp, path);
+        private static void SavePng(RasterImage bmp, string path) => Save(ImageEncoding.Png(), bmp, path);
 
-        private static void Save(BitmapEncoder enc, BitmapSource bmp, string path)
+        private static void Save(ImageEncoding encoding, RasterImage bmp, string path)
         {
-            enc.Frames.Add(BitmapFrame.Create(bmp));
             using var fs = File.Create(path);
-            enc.Save(fs);
+            Platform.Images.Encode(bmp, fs, encoding);
         }
 
-        private static void SaveJpegWithExif(BitmapSource bmp, string path, int orientation, int quality = 95)
+        /// <summary>A camera-like JPEG: EXIF orientation plus make, firmware and artist.</summary>
+        private static void SaveJpegWithExif(RasterImage bmp, string path, int orientation, int quality = 95)
         {
-            var meta = new BitmapMetadata("jpg");
-            meta.SetQuery("/app1/ifd/{ushort=274}", (ushort)orientation);
-            meta.SetQuery("/app1/ifd/{ushort=271}", "TestCam");
-            meta.SetQuery("/app1/ifd/{ushort=305}", "TestCam Firmware 1.0");
-            meta.SetQuery("/app1/ifd/{ushort=315}", "Jane Doe");
-            var enc = new JpegBitmapEncoder { QualityLevel = quality };
-            enc.Frames.Add(BitmapFrame.Create(bmp, null, meta, null));
-            using var fs = File.Create(path);
-            enc.Save(fs);
+            using var ms = new MemoryStream();
+            Platform.Images.Encode(bmp, ms, ImageEncoding.Jpeg(quality));
+            byte[] exif = JpegExif.Build(orientation, (JpegExif.MakeTag, "TestCam"), (JpegExif.SoftwareTag, "TestCam Firmware 1.0"), (JpegExif.ArtistTag, "Jane Doe"));
+            File.WriteAllBytes(path, JpegExif.Insert(ms.ToArray(), exif));
         }
 
-        private static BitmapMetadata? ReadMetadata(string path)
-        {
-            using var fs = File.OpenRead(path);
-            return BitmapDecoder.Create(fs, BitmapCreateOptions.DelayCreation, BitmapCacheOption.OnLoad).Frames[0].Metadata as BitmapMetadata;
-        }
+        private static int Orientation(string path) => Platform.Images.ReadOrientation(File.ReadAllBytes(path));
 
-        private static object? SafeQuery(BitmapMetadata m, string q)
-        {
-            try { return m.ContainsQuery(q) ? m.GetQuery(q) : null; } catch { return null; }
-        }
+        private static RasterImage Decode(string path) => Platform.Images.Decode(File.ReadAllBytes(path));
 
-        private static BitmapSource Decode(string path)
-        {
-            using var fs = File.OpenRead(path);
-            return BitmapDecoder.Create(fs, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
-        }
-
-        private static byte[] Bgra(BitmapSource b)
-        {
-            var c = new FormatConvertedBitmap(b, PixelFormats.Bgra32, null, 0);
-            var px = new byte[c.PixelWidth * c.PixelHeight * 4];
-            c.CopyPixels(px, c.PixelWidth * 4, 0);
-            return px;
-        }
+        private static byte[] Bgra(RasterImage b) => Platform.Images.ToBgra(b).Pixels;
 
         private static void AssertSamePixels(string a, string b, string what)
         {
             var pa = Decode(a);
             var pb = Decode(b);
-            if (pa.PixelWidth != pb.PixelWidth || pa.PixelHeight != pb.PixelHeight) throw new Exception($"{what}: size changed");
+            if (pa.Width != pb.Width || pa.Height != pb.Height) throw new Exception($"{what}: size changed");
             if (!Bgra(pa).AsSpan().SequenceEqual(Bgra(pb))) throw new Exception($"{what}: pixels differ (not lossless)");
         }
 

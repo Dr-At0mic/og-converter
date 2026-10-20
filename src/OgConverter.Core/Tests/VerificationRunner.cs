@@ -7,27 +7,37 @@ using OgConverter.Services;
 namespace OgConverter.Tests
 {
     /// <summary>
-    /// Self-test sections only the app can run: they create their test files with Office or the UI toolkit, or check
-    /// clipboard, drag-and-drop and other desktop features. Sections left null are skipped with a note.
+    /// What only the app can do for the self-test: create test files with Office or the system's own encoders, read the
+    /// clipboard back, mark a file as downloaded, and the drag-and-drop and dialog checks of its UI toolkit. Hooks left
+    /// null skip their checks with a note.
     /// </summary>
     public sealed class PlatformSelfTests
     {
-        /// <summary>[17]–[19]: actions, PDF passwords, Office/LibreOffice documents. (engine, settings, tempDir, testPdf)</summary>
-        public Func<ConversionEngine, AppSettings, string, string, Task>? Documents { get; init; }
-        /// <summary>[30] Compression of every file kind. (engine, settings, tempDir)</summary>
-        public Func<ConversionEngine, AppSettings, string, Task>? Compression { get; init; }
-        /// <summary>[20] Crop / Trim. (engine, settings, tempDir, testPng)</summary>
-        public Func<ConversionEngine, AppSettings, string, string, Task>? Edit { get; init; }
         /// <summary>[21] Drag sources. (tempDir)</summary>
         public Action<string>? DragDrop { get; init; }
-        /// <summary>[23] Web pages, SVG, HEIC, OCR, rotate/snapshot, archives, clipboard and unblock. (engine, settings, tempDir)</summary>
-        public Func<ConversionEngine, AppSettings, string, Task>? Everyday { get; init; }
+        /// <summary>Extra Crop / Trim checks of the app's own dialogs (time parsing).</summary>
+        public Action? EditDialogs { get; init; }
+        /// <summary>Writes a Word document with a full-page picture behind white text in its header. (path, picture)</summary>
+        public Action<string, string>? CreateHeaderBackgroundDocx { get; init; }
+        /// <summary>
+        /// Writes a two-slide PPTX: slide 1 titled "OG Converter test deck" with the speaker note "Remember the demo",
+        /// slide 2 showing the picture. (path, picture)
+        /// </summary>
+        public Action<string, string>? CreatePresentation { get; init; }
+        /// <summary>Writes a 64×48 HEIC photo with the system's encoder; false when it has none. (path)</summary>
+        public Func<string, Task<bool>>? WriteHeicAsync { get; init; }
+        /// <summary>The text on the clipboard.</summary>
+        public Func<string>? ReadClipboardText { get; init; }
+        /// <summary>Whether the clipboard holds a picture and a file (after Copy Image).</summary>
+        public Func<(bool Image, bool File)>? ReadClipboardImageAndFile { get; init; }
+        /// <summary>Marks a file as downloaded from the internet, the way browsers do. (path)</summary>
+        public Action<string>? MarkAsDownloaded { get; init; }
     }
 
     public static class VerificationRunner
     {
         /// <param name="only">Section names to run on their own (e.g. "markdown", "everyday"); null runs everything.</param>
-        /// <param name="platform">The app's own sections; null skips them.</param>
+        /// <param name="platform">What only the app can do (see <see cref="PlatformSelfTests"/>); null skips those checks.</param>
         public static async Task RunSelfTestAsync(string[]? only = null, PlatformSelfTests? platform = null)
         {
             platform ??= new PlatformSelfTests();
@@ -47,8 +57,16 @@ namespace OgConverter.Tests
                 {
                     var quick = new ConversionEngine();
                     var quickSettings = new AppSettings { SaveInSameDirectory = true };
+                    if (Array.IndexOf(only, "documents") >= 0)
+                    {
+                        string pdf = Path.Combine(tempDir, "test_doc.pdf");
+                        CreateDummyPdf(pdf, pageCount: 2);
+                        await DocumentVerification.RunAsync(quick, quickSettings, tempDir, pdf, platform);
+                    }
+                    if (Array.IndexOf(only, "compression") >= 0) await CompressionVerification.RunAsync(quick, quickSettings, tempDir);
+                    if (Array.IndexOf(only, "edit") >= 0) await EditVerification.RunAsync(quick, quickSettings, tempDir, testPng, platform);
                     if (Array.IndexOf(only, "markdown") >= 0) await MarkdownVerification.RunAsync(quick, quickSettings, tempDir, testPng);
-                    if (Array.IndexOf(only, "everyday") >= 0) await RunOrSkipAsync("everyday", platform.Everyday, f => f(quick, quickSettings, tempDir));
+                    if (Array.IndexOf(only, "everyday") >= 0) await EverydayVerification.RunAsync(quick, quickSettings, tempDir, platform);
                     if (Array.IndexOf(only, "archive") >= 0) await ArchiveVerification.RunAsync(quick, quickSettings, tempDir, testPng);
                     if (Array.IndexOf(only, "protection") >= 0)
                     {
@@ -230,14 +248,14 @@ namespace OgConverter.Tests
                 Console.WriteLine($"[14] Folder via Convert wheel rejected: {!dirJob.IsSuccess} ({dirJob.ErrorMessage})");
                 if (dirJob.IsSuccess) throw new Exception("Folder conversion should be rejected");
 
-                await RunOrSkipAsync("documents", platform.Documents, f => f(engine, settings, tempDir, testPdf));
+                await DocumentVerification.RunAsync(engine, settings, tempDir, testPdf, platform);
                 await ProtectionVerification.RunAsync(engine, settings, tempDir, testPdf);
                 await ArchiveVerification.RunAsync(engine, settings, tempDir, testPng);
-                await RunOrSkipAsync("compression", platform.Compression, f => f(engine, settings, tempDir));
-                await RunOrSkipAsync("crop / trim", platform.Edit, f => f(engine, settings, tempDir, testPng));
+                await CompressionVerification.RunAsync(engine, settings, tempDir);
+                await EditVerification.RunAsync(engine, settings, tempDir, testPng, platform);
                 await RunOrSkipAsync("drag sources", platform.DragDrop, f => { f(tempDir); return Task.CompletedTask; });
                 await MarkdownVerification.RunAsync(engine, settings, tempDir, testPng);
-                await RunOrSkipAsync("everyday", platform.Everyday, f => f(engine, settings, tempDir));
+                await EverydayVerification.RunAsync(engine, settings, tempDir, platform);
 
                 Console.WriteLine("=== ALL VERIFICATION TESTS PASSED SUCCESSFULLY ===");
             }

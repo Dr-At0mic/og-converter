@@ -72,6 +72,8 @@ namespace OgConverter.Services
         public bool NoInterlace { get; init; }
         /// <summary>TIFF: Deflate (ZIP) compression. Otherwise the encoder's default.</summary>
         public bool Deflate { get; init; }
+        /// <summary>TIFF: no compression at all (when <see cref="Deflate"/> is off).</summary>
+        public bool Uncompressed { get; init; }
 
         public static ImageEncoding Png(bool noInterlace = false) => new(ImageFileFormat.Png) { NoInterlace = noInterlace };
         public static ImageEncoding Jpeg(int quality) => new(ImageFileFormat.Jpeg) { Quality = quality };

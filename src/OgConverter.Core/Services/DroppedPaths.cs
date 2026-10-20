@@ -42,7 +42,7 @@ namespace OgConverter.Services
             if (string.IsNullOrEmpty(path)) return;
             path = path.TrimEnd('\\', '/');
             if (path.EndsWith(':')) path += "\\"; // drive root
-            if ((File.Exists(path) || Directory.Exists(path)) && !paths.Contains(path, StringComparer.OrdinalIgnoreCase)) paths.Add(path);
+            if ((File.Exists(path) || Directory.Exists(path)) && !paths.Contains(path, Platform.PathComparer)) paths.Add(path);
         }
     }
 }

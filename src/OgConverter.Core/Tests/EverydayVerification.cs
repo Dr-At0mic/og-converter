@@ -4,11 +4,10 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using OgConverter.Models;
 using OgConverter.Services;
+using PdfSharp.Drawing;
+using PdfSharp.Pdf;
 
 namespace OgConverter.Tests
 {
@@ -18,7 +17,7 @@ namespace OgConverter.Tests
     /// </summary>
     public static class EverydayVerification
     {
-        public static async Task RunAsync(ConversionEngine engine, AppSettings settings, string tempDir)
+        public static async Task RunAsync(ConversionEngine engine, AppSettings settings, string tempDir, PlatformSelfTests platform)
         {
             Console.WriteLine("[23] Everyday tools");
             string dir = Path.Combine(tempDir, "everyday");
@@ -26,11 +25,11 @@ namespace OgConverter.Tests
 
             await WebPagesAsync(engine, settings, dir);
             await SvgAsync(engine, settings, dir);
-            await HeicAsync(engine, settings, dir);
+            await HeicAsync(engine, settings, dir, platform);
             await OcrAsync(engine, settings, dir);
             await RotateAndSnapshotAsync(engine, settings, dir);
             await ArchivesAsync(engine, settings, dir);
-            await ActionsAsync(engine, settings, dir);
+            await ActionsAsync(engine, settings, dir, platform);
         }
 
         private static async Task<ConversionJob> RunAsync(ConversionEngine engine, AppSettings settings, string file, WheelMode mode, string idOrExt, string label)
@@ -45,12 +44,7 @@ namespace OgConverter.Tests
             return job;
         }
 
-        private static (int W, int H) Size(string png)
-        {
-            using var fs = File.OpenRead(png);
-            var frame = BitmapDecoder.Create(fs, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0];
-            return (frame.PixelWidth, frame.PixelHeight);
-        }
+        private static (int W, int H) Size(string png) => Platform.Images.ReadPixelSize(png);
 
         private static async Task WebPagesAsync(ConversionEngine engine, AppSettings settings, string dir)
         {
@@ -64,7 +58,7 @@ namespace OgConverter.Tests
             string site = Path.Combine(dir, "site");
             Directory.CreateDirectory(site);
             File.WriteAllText(Path.Combine(site, "style.css"), "body { background: #102030; color: #fff; font: 20px Segoe UI; } .box { height: 2400px; border: 4px solid #f80; }");
-            SavePng(Path.Combine(site, "pic.png"), 120, 80, Colors.OrangeRed);
+            SavePng(Path.Combine(site, "pic.png"), 120, 80, 0xFF4500); // orange red
             string page = Path.Combine(site, "page.html");
             File.WriteAllText(page, "<!DOCTYPE html><html><head><link rel=stylesheet href=style.css><title>T</title></head>" +
                                     "<body><h1>Hello page</h1><img src=pic.png><div class=box>tall</div><p>The end</p></body></html>");
@@ -123,13 +117,8 @@ namespace OgConverter.Tests
 
             var png = await RunAsync(engine, settings, svg, WheelMode.Convert, "png", "SVG → PNG");
             if (Size(png.TargetPath) != (240, 160)) throw new Exception($"SVG PNG should be drawn at 2x: {Size(png.TargetPath)}");
-            using (var fs = File.OpenRead(png.TargetPath))
-            {
-                var frame = new FormatConvertedBitmap(BitmapDecoder.Create(fs, BitmapCreateOptions.None, BitmapCacheOption.OnLoad).Frames[0], PixelFormats.Bgra32, null, 0);
-                byte[] px = new byte[4];
-                frame.CopyPixels(new Int32Rect(1, 1, 1, 1), px, 4, 0);
-                if (px[3] != 0) throw new Exception("SVG background should stay transparent");
-            }
+            var pixels = Platform.Images.ToBgra(Platform.Images.Decode(File.ReadAllBytes(png.TargetPath)));
+            if (pixels.Pixels[pixels.Stride + 4 + 3] != 0) throw new Exception("SVG background should stay transparent");
             await RunAsync(engine, settings, svg, WheelMode.Convert, "jpg", "SVG → JPG");
             await RunAsync(engine, settings, svg, WheelMode.Convert, "ico", "SVG → ICO");
             var pdf = await RunAsync(engine, settings, svg, WheelMode.Convert, "pdf", "SVG → PDF (vector)");
@@ -137,10 +126,10 @@ namespace OgConverter.Tests
             if (doc.NumberOfPages != 1 || !doc.GetPage(1).Text.Contains("OG Logo")) throw new Exception("SVG PDF should be one page with real text");
         }
 
-        private static async Task HeicAsync(ConversionEngine engine, AppSettings settings, string dir)
+        private static async Task HeicAsync(ConversionEngine engine, AppSettings settings, string dir, PlatformSelfTests platform)
         {
             string heic = Path.Combine(dir, "phone photo.heic");
-            if (!await TryWriteHeicAsync(heic))
+            if (platform.WriteHeicAsync == null || !await platform.WriteHeicAsync(heic))
             {
                 Console.WriteLine("     (skip HEIC: this PC can't write HEIC to test with)");
                 return;
@@ -152,32 +141,6 @@ namespace OgConverter.Tests
             await RunAsync(engine, settings, heic, WheelMode.Convert, "pdf", "HEIC → PDF");
         }
 
-        /// <summary>HEIC through Windows' own encoder (HEIF + HEVC extensions); false when they aren't installed.</summary>
-        private static async Task<bool> TryWriteHeicAsync(string path)
-        {
-            try
-            {
-                byte[] px = new byte[64 * 48 * 4];
-                for (int i = 0; i < px.Length; i += 4) { px[i] = 40; px[i + 1] = 120; px[i + 2] = 220; px[i + 3] = 255; }
-                File.WriteAllBytes(path, Array.Empty<byte>());
-                var file = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
-                using (var stream = await file.OpenAsync(Windows.Storage.FileAccessMode.ReadWrite))
-                {
-                    var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(Windows.Graphics.Imaging.BitmapEncoder.HeifEncoderId, stream);
-                    encoder.SetPixelData(Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8, Windows.Graphics.Imaging.BitmapAlphaMode.Ignore, 64, 48, 96, 96, px);
-                    await encoder.FlushAsync();
-                }
-                if (new FileInfo(path).Length > 0) return true;
-                Console.WriteLine("     (HEIC encoder wrote nothing)");
-                return false;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"     (HEIC encoder: {ex.GetType().Name}: {ex.Message.Trim()})");
-                return false;
-            }
-        }
-
         private static async Task OcrAsync(ConversionEngine engine, AppSettings settings, string dir)
         {
             if (!OcrService.IsAvailable)
@@ -187,7 +150,11 @@ namespace OgConverter.Tests
             }
 
             string shot = Path.Combine(dir, "screenshot.png");
-            SaveText(shot, "Invoice number 4821\nTotal due 129.50 EUR");
+            if (!await SaveTextAsync(shot, "Invoice number 4821", "Total due 129.50 EUR"))
+            {
+                Console.WriteLine("     (skip OCR: no PDF renderer to draw the test picture)");
+                return;
+            }
             var job = await RunAsync(engine, settings, shot, WheelMode.Tools, "tool_ocr", "Picture → Extract Text (OCR)");
             string text = File.ReadAllText(job.TargetPath);
             if (!text.Contains("Invoice") || !text.Contains("4821")) throw new Exception($"OCR read: {text}");
@@ -202,7 +169,7 @@ namespace OgConverter.Tests
         private static async Task RotateAndSnapshotAsync(ConversionEngine engine, AppSettings settings, string dir)
         {
             string photo = Path.Combine(dir, "wide.png");
-            SavePng(photo, 90, 40, Colors.SeaGreen);
+            SavePng(photo, 90, 40, 0x2E8B57); // sea green
             var rotated = await RunAsync(engine, settings, photo, WheelMode.Tools, "tool_rotate", "Image → Rotate 90°");
             if (Size(rotated.TargetPath) != (40, 90)) throw new Exception($"Rotated image is {Size(rotated.TargetPath)}");
 
@@ -229,12 +196,13 @@ namespace OgConverter.Tests
             Directory.CreateDirectory(Path.Combine(content, "sub"));
             File.WriteAllText(Path.Combine(content, "a.txt"), "alpha");
             File.WriteAllText(Path.Combine(content, "sub", "b.txt"), "bravo");
-            string tar = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe");
+            // libarchive's tar (tar.exe in Windows, bsdtar elsewhere) writes every kind from the file name
+            string? tar = ArchiveService.BsdTarPath;
 
             var made = new System.Collections.Generic.List<string>();
             foreach (string name in new[] { "pack.7z", "pack.tar.gz", "pack.tar", "pack.tar.bz2", "pack.tar.xz" })
             {
-                if (!File.Exists(tar)) break;
+                if (tar == null) break;
                 string path = Path.Combine(dir, name);
                 var psi = new ProcessStartInfo(tar) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = content };
                 foreach (string a in new[] { "-a", "-cf", path, "a.txt", "sub" }) psi.ArgumentList.Add(a);
@@ -274,69 +242,79 @@ namespace OgConverter.Tests
             }
         }
 
-        private static async Task ActionsAsync(ConversionEngine engine, AppSettings settings, string dir)
+        private static async Task ActionsAsync(ConversionEngine engine, AppSettings settings, string dir, PlatformSelfTests platform)
         {
-            string notes = Path.Combine(dir, "notes.cs");
-            File.WriteAllText(notes, "class Hello { }");
-            await RunAsync(engine, settings, notes, WheelMode.Actions, "act_copy_text", "Code file → Copy Text");
-            string clip = "";
-            RunSta(() => clip = Clipboard.GetText());
-            if (clip != "class Hello { }") throw new Exception($"Clipboard has '{clip}'");
+            if (platform.ReadClipboardText == null || platform.ReadClipboardImageAndFile == null)
+            {
+                Console.WriteLine("     (skip clipboard: no desktop session to copy to)");
+            }
+            else
+            {
+                string notes = Path.Combine(dir, "notes.cs");
+                File.WriteAllText(notes, "class Hello { }");
+                await RunAsync(engine, settings, notes, WheelMode.Actions, "act_copy_text", "Code file → Copy Text");
+                string clip = platform.ReadClipboardText();
+                if (clip != "class Hello { }") throw new Exception($"Clipboard has '{clip}'");
 
-            string photo = Path.Combine(dir, "copy me.png");
-            SavePng(photo, 30, 20, Colors.Gold);
-            await RunAsync(engine, settings, photo, WheelMode.Actions, "act_copy_image", "Image → Copy Image");
-            bool hasImage = false, hasFile = false;
-            RunSta(() => { hasImage = Clipboard.ContainsImage(); hasFile = Clipboard.ContainsFileDropList(); });
-            if (!hasImage || !hasFile) throw new Exception("Clipboard should hold the picture and the file");
+                string photo = Path.Combine(dir, "copy me.png");
+                SavePng(photo, 30, 20, 0xFFD700); // gold
+                await RunAsync(engine, settings, photo, WheelMode.Actions, "act_copy_image", "Image → Copy Image");
+                var (hasImage, hasFile) = platform.ReadClipboardImageAndFile();
+                if (!hasImage || !hasFile) throw new Exception("Clipboard should hold the picture and the file");
+            }
 
             // Mark of the Web, as a browser writes it
+            if (platform.MarkAsDownloaded == null)
+            {
+                Console.WriteLine("     (skip unblock: this system doesn't mark downloaded files)");
+                return;
+            }
             string download = Path.Combine(dir, "download.txt");
             File.WriteAllText(download, "x");
-            File.WriteAllText(download + ":Zone.Identifier", "[ZoneTransfer]\r\nZoneId=3\r\n");
-            if (!WindowsShellService.IsBlocked(download)) throw new Exception("Downloaded file should be detected as blocked");
+            platform.MarkAsDownloaded(download);
+            if (!Platform.Desktop.IsBlocked(download)) throw new Exception("Downloaded file should be detected as blocked");
             await RunAsync(engine, settings, download, WheelMode.Actions, "act_unblock", "Downloaded file → Unblock");
-            if (WindowsShellService.IsBlocked(download)) throw new Exception("File is still blocked");
+            if (Platform.Desktop.IsBlocked(download)) throw new Exception("File is still blocked");
             if (FormatRegistry.GetWheelItems(download, WheelMode.Actions).Any(i => i.Id == "act_unblock")) throw new Exception("Unblock shown for a file that isn't blocked");
         }
 
-        private static void SavePng(string path, int w, int h, Color color) =>
-            RenderToPng(path, w, h, dc => dc.DrawRectangle(new SolidColorBrush(color), null, new Rect(0, 0, w, h)));
-
-        /// <summary>Black text on white, like a screenshot of a document.</summary>
-        private static void SaveText(string path, string text) =>
-            RenderToPng(path, 900, 220, dc =>
-            {
-                dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, 900, 220));
-                var ft = new FormattedText(text, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-                    new Typeface("Segoe UI"), 40, Brushes.Black, 1.0);
-                dc.DrawText(ft, new Point(30, 30));
-            });
-
-        /// <summary>WPF drawing needs an STA thread; the self-test runs on the thread pool.</summary>
-        private static void RenderToPng(string path, int w, int h, Action<DrawingContext> draw)
+        /// <summary>A plain picture of one color (0xRRGGBB).</summary>
+        private static void SavePng(string path, int w, int h, int rgb)
         {
-            RunSta(() =>
+            var px = new byte[w * h * 4];
+            for (int i = 0; i < px.Length; i += 4)
             {
-                var visual = new DrawingVisual();
-                using (var dc = visual.RenderOpen()) draw(dc);
-                var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
-                rtb.Render(visual);
-                var enc = new PngBitmapEncoder();
-                enc.Frames.Add(BitmapFrame.Create(rtb));
-                using var fs = File.Create(path);
-                enc.Save(fs);
-            });
+                px[i] = (byte)rgb;
+                px[i + 1] = (byte)(rgb >> 8);
+                px[i + 2] = (byte)(rgb >> 16);
+                px[i + 3] = 255;
+            }
+            using var fs = File.Create(path);
+            Platform.Images.Encode(Platform.Images.FromPixels(w, h, 96, RasterFormat.Bgra32, px, w * 4), fs, ImageEncoding.Png());
         }
 
-        private static void RunSta(Action action)
+        /// <summary>
+        /// Black text on white, like a screenshot of a document: drawn on a PDF page and rendered, so it only needs the
+        /// PDF renderer. False when there's none.
+        /// </summary>
+        private static async Task<bool> SaveTextAsync(string path, params string[] lines)
         {
-            Exception? error = null;
-            var t = new System.Threading.Thread(() => { try { action(); } catch (Exception ex) { error = ex; } });
-            t.SetApartmentState(System.Threading.ApartmentState.STA);
-            t.Start();
-            t.Join();
-            if (error != null) throw error;
+            if (Platform.Pdf == null) return false;
+            PdfFonts.EnsureConfigured();
+            string pdf = Path.ChangeExtension(path, ".source.pdf");
+            using (var doc = new PdfDocument())
+            {
+                var page = doc.AddPage();
+                page.Width = XUnit.FromPoint(675);
+                page.Height = XUnit.FromPoint(165);
+                using var gfx = XGraphics.FromPdfPage(page);
+                var font = new XFont("Arial", 30);
+                for (int i = 0; i < lines.Length; i++) gfx.DrawString(lines[i], font, XBrushes.Black, new XPoint(22, 52 + i * 42));
+                doc.Save(pdf);
+            }
+            await PdfRenderService.RenderPagesToPngAsync(pdf, (_, _) => path);
+            File.Delete(pdf);
+            return File.Exists(path);
         }
     }
 }

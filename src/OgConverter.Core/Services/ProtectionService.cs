@@ -240,7 +240,7 @@ namespace OgConverter.Services
             {
                 // Zip-slip guard: never write outside the target folder
                 string dest = Path.GetFullPath(Path.Combine(folder, entry.Name));
-                if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!dest.StartsWith(root, Platform.PathComparison)) continue;
 
                 if (entry.IsDirectory)
                 {

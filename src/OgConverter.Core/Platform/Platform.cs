@@ -56,6 +56,15 @@ namespace OgConverter.Services
         /// <summary>End of the release asset this build updates from ("-win-x64.exe"); null when there's none for this platform.</summary>
         public static string? UpdateAssetSuffix { get; set; }
 
+        /// <summary>
+        /// How file paths compare: ignoring case on Windows, exactly elsewhere (on Linux "Photo.png" and "photo.png" are two
+        /// different files).
+        /// </summary>
+        public static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        /// <summary>The <see cref="PathComparison"/> rule for sets, dictionaries and sorting.</summary>
+        public static StringComparer PathComparer => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
         /// <summary>"ffmpeg" → "ffmpeg.exe" on Windows, unchanged elsewhere.</summary>
         public static string ExeName(string tool) => OperatingSystem.IsWindows() ? tool + ".exe" : tool;
 

@@ -108,7 +108,7 @@ namespace OgConverter.Services
                 // Relative pictures (README screenshots) only resolve from the README's own folder; anywhere else
                 // (the temp folder, another output folder) they need absolute addresses
                 string srcDir = Path.GetDirectoryName(Path.GetFullPath(src))!;
-                bool besideSource = string.Equals(Path.GetDirectoryName(Path.GetFullPath(dst)), srcDir, StringComparison.OrdinalIgnoreCase);
+                bool besideSource = string.Equals(Path.GetDirectoryName(Path.GetFullPath(dst)), srcDir, Platform.PathComparison);
                 string html = MarkdownToHtml(markdown, Path.GetFileNameWithoutExtension(src), dstExt == "html" && besideSource ? null : srcDir);
                 if (dstExt == "html")
                 {

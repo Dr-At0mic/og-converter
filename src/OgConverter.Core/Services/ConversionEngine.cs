@@ -124,7 +124,7 @@ namespace OgConverter.Services
                 if (job.ErrorMessage == null && File.Exists(job.TargetPath))
                 {
                     // Results written in place (hash, copy path) have no output file to compare sizes with
-                    if (!string.Equals(job.TargetPath, job.SourcePath, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(job.TargetPath, job.SourcePath, Platform.PathComparison))
                     {
                         job.ConvertedSizeBytes = new FileInfo(job.TargetPath).Length;
                     }
