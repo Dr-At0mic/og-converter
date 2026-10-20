@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using OgConverter.Controls;
 using OgConverter.Models;
 using OgConverter.Services;
@@ -447,10 +448,11 @@ namespace OgConverter
         }
 
         /// <summary>Title bar "Preview the wheel": the wheel for the try-it file, or a sample picture.</summary>
-        private void OnTestWheelClick(object? sender, RoutedEventArgs e)
-        {
+        private void OnTestWheelClick(object? sender, RoutedEventArgs e) => PreviewWheel();
+
+        /// <summary>The wheel for the try-it file, or a sample picture (title bar, tray menu).</summary>
+        public void PreviewWheel() =>
             _wheel.ShowFor(_playgroundLoadedFile ?? Path.Combine(Path.GetTempPath(), "Holiday.png"), WheelMode.Convert);
-        }
 
         // ------------------------------------------------------------------ settings
 

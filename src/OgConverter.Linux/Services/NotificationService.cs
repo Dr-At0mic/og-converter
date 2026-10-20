@@ -145,24 +145,25 @@ namespace OgConverter.Services
                         var r = m.GetBodyReader();
                         return (Id: r.ReadUInt32(), Action: r.ReadString());
                     },
-                    (Exception? ex, (uint Id, string Action) e) =>
+                    (Notification<(uint Id, string Action)> n) =>
                     {
-                        if (ex != null || !_targets.TryGetValue(e.Id, out string? path)) return;
+                        if (!n.HasValue || !_targets.TryGetValue(n.Value.Id, out string? path)) return;
+                        string action = n.Value.Action;
                         Dispatcher.UIThread.Post(() =>
                         {
-                            if (e.Action == "reveal") DesktopActions.RevealInFileManager(path);
+                            if (action == "reveal") DesktopActions.RevealInFileManager(path);
                             else DesktopActions.OpenFile(path);
                         });
                     },
-                    null, false, ObserverFlags.None);
+                    ObserverFlags.None, emitOnCapturedContext: false);
 
                 await connection.WatchSignalAsync(Service, ObjectPath, Service, "NotificationClosed",
                     (m, _) => m.GetBodyReader().ReadUInt32(),
-                    (Exception? ex, uint id) =>
+                    (Notification<uint> n) =>
                     {
-                        if (ex == null) _targets.TryRemove(id, out _);
+                        if (n.HasValue) _targets.TryRemove(n.Value, out _);
                     },
-                    null, false, ObserverFlags.None);
+                    ObserverFlags.None, emitOnCapturedContext: false);
             }
             catch (Exception ex) when (ex is DBusExceptionBase or InvalidOperationException or ObjectDisposedException)
             {

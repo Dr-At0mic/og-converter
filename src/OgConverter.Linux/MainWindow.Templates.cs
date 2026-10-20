@@ -209,7 +209,7 @@ namespace OgConverter
             var arcs = new (Color Color, double Start)[] { (convert, -90), (tools, 30), (actions, 150) };
             foreach (var (color, start) in arcs)
             {
-                grid.Children.Add(new Path
+                grid.Children.Add(new Avalonia.Controls.Shapes.Path
                 {
                     Data = Arc(46, 46, r, start + 8, start + 112),
                     Stroke = new SolidColorBrush(color),

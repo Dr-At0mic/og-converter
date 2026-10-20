@@ -52,7 +52,10 @@
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
     </Style>
-    <Style Selector="TextBlock.Mono, TextBox.Mono">
+    <Style Selector="TextBlock.Mono">
+        <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
+    </Style>
+    <Style Selector="TextBox.Mono">
         <Setter Property="FontFamily" Value="{StaticResource MonoFont}" />
     </Style>
 
@@ -155,5 +158,38 @@
 
     <Style Selector="ScrollBar /template/ Thumb">
         <Setter Property="Background" Value="{DynamicResource ScrollThumbBrush}" />
+    </Style>
+    <!-- Tool dialogs (Views/): card, header badge, status line and footer, as on Windows -->
+    <Style Selector="Border.DialogCard">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Margin" Value="16" />
+        <Setter Property="BoxShadow" Value="{StaticResource FlyoutShadow}" />
+    </Style>
+    <Style Selector="Grid.DialogHeader">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Margin" Value="24,22,24,18" />
+    </Style>
+    <Style Selector="Border.DialogBadge">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Margin" Value="0,0,14,0" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+    </Style>
+    <Style Selector="Border.StatusLine">
+        <Setter Property="Background" Value="{DynamicResource InputBrush}" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Padding" Value="12,10" />
+    </Style>
+    <Style Selector="Border.DialogFooter">
+        <Setter Property="Background" Value="{DynamicResource WindowBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DividerBrush}" />
+        <Setter Property="BorderThickness" Value="0,1,0,0" />
+        <Setter Property="CornerRadius" Value="0,0,12,12" />
+        <Setter Property="Padding" Value="24,14" />
+        <Setter Property="Margin" Value="0,22,0,0" />
     </Style>
 </Styles>

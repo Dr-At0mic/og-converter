@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
@@ -12,7 +13,8 @@ namespace OgConverter.Services
         SevenZip,
         Rar,
         Browser,
-        Tesseract
+        Tesseract,
+        Guetzli
     }
 
     /// <summary>
@@ -63,6 +65,7 @@ namespace OgConverter.Services
                 (Family.Debian, EngineTool.Tesseract) => "tesseract-ocr",
                 (Family.Arch, EngineTool.Tesseract) => "tesseract tesseract-data-eng",
                 (_, EngineTool.Tesseract) => "tesseract",
+                (_, EngineTool.Guetzli) => "guetzli",
                 _ => null
             };
             if (package == null) return null;
@@ -78,6 +81,39 @@ namespace OgConverter.Services
                 Family.Suse => $"sudo zypper install {package}",
                 _ => null
             };
+        }
+
+        /// <summary>The Settings › Engine entry for a helper Core asks for.</summary>
+        public static EngineTool ToolFor(Dependency dependency) => dependency switch
+        {
+            Dependency.FFmpeg => EngineTool.FFmpeg,
+            Dependency.SevenZip => EngineTool.SevenZip,
+            Dependency.WinRar => EngineTool.Rar,
+            Dependency.Guetzli => EngineTool.Guetzli,
+            _ => EngineTool.LibreOffice
+        };
+
+        /// <summary>The helper's name on Linux (WinRAR's command-line tool is just "rar" here).</summary>
+        public static string DisplayName(Dependency dependency) =>
+            dependency == Dependency.WinRar ? "rar" : DependencyService.DisplayName(dependency);
+
+        /// <summary>
+        /// One command for several helpers ("sudo apt install ffmpeg libreoffice"); helpers from another source (the Chromium
+        /// snap) go on their own line. Null when none has a known command.
+        /// </summary>
+        public static string? InstallCommand(IEnumerable<EngineTool> tools)
+        {
+            var lines = new List<string>();
+            foreach (var tool in tools)
+            {
+                if (InstallCommand(tool) is not { } command) continue;
+                int split = command.LastIndexOf(" install ", StringComparison.Ordinal) is var i and >= 0 ? i + " install ".Length
+                          : command.LastIndexOf(" -S ", StringComparison.Ordinal) is var j and >= 0 ? j + " -S ".Length : -1;
+                int same = split < 0 ? -1 : lines.FindIndex(l => l.StartsWith(command[..split], StringComparison.Ordinal));
+                if (same >= 0) lines[same] += " " + command[split..];
+                else lines.Add(command);
+            }
+            return lines.Count > 0 ? string.Join('\n', lines) : null;
         }
 
         private static bool IsUbuntu

@@ -1,0 +1,55 @@
+<v:DialogWindow xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:c="using:OgConverter.Controls"
+                xmlns:v="using:OgConverter.Views"
+                x:Class="OgConverter.Views.PdfSplitDialog"
+                Title="Split / Extract Pages" Width="480">
+
+    <Border Classes="DialogCard">
+        <StackPanel>
+            <!-- Header (drag to move) -->
+            <Grid Classes="DialogHeader" ColumnDefinitions="Auto,*" PointerPressed="OnHeaderPointerPressed">
+                <Border Classes="DialogBadge" Background="{DynamicResource ModeToolsSubtleBrush}">
+                    <TextBlock Text="{c:Icon E8C6}" Classes="Icon" Foreground="{DynamicResource ModeToolsBrush}" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Split or extract pages" Classes="H2" />
+                    <TextBlock x:Name="FileInfoText" Classes="Caption" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Margin="24,0,24,0">
+                <!-- Mode -->
+                <RadioButton x:Name="ModeExtractRadio" GroupName="SplitMode" IsChecked="True" Margin="0,0,0,12"
+                             Content="Extract the pages into one PDF" IsCheckedChanged="OnInputChanged" />
+                <RadioButton x:Name="ModeEachRangeRadio" GroupName="SplitMode" Margin="0,0,0,12"
+                             Content="Save each range as its own PDF" IsCheckedChanged="OnInputChanged" />
+                <RadioButton x:Name="ModeEveryPageRadio" GroupName="SplitMode"
+                             Content="Split every page into its own PDF" IsCheckedChanged="OnInputChanged" />
+
+                <!-- Ranges -->
+                <TextBlock Text="Pages" FontWeight="SemiBold" Margin="0,22,0,8" />
+                <TextBox x:Name="RangesBox" Classes="Mono" TextChanged="OnRangesChanged" />
+                <TextBlock Classes="Caption" Margin="0,8,0,0" FontSize="11.5">
+                    <Run Text="For example " /><Run Text="1-3, 5, 8-" FontFamily="{StaticResource MonoFont}" Foreground="{DynamicResource TextPrimaryBrush}" /><Run Text=". " /><Run Text="8-" FontFamily="{StaticResource MonoFont}" Foreground="{DynamicResource TextPrimaryBrush}" /><Run Text=" runs to the last page." />
+                </TextBlock>
+
+                <!-- Live preview / validation -->
+                <Border Classes="StatusLine" Margin="0,16,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="PreviewIcon" Classes="Icon" FontSize="12" Margin="0,0,8,0" />
+                        <TextBlock x:Name="PreviewText" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="360" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Footer -->
+            <Border Classes="DialogFooter">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Cancel" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
+                    <Button x:Name="ConfirmButton" Theme="{StaticResource AccentButton}" Content="Extract" IsDefault="True" Click="OnConfirmClick" MinWidth="88" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</v:DialogWindow>

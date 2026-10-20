@@ -6,6 +6,11 @@ using Tmds.DBus.Protocol;
 namespace OgConverter.Services
 {
     /// <summary>Small helpers for the session D-Bus (shared connection; every call fails soft when there's no bus).</summary>
+    /// <remarks>
+    /// TODO(merge): the wheel branch's DBusService opens its own connection to own the app's bus name. Once merged, return
+    /// that connection here (DBusService.Primary) when it exists, so the app keeps one session-bus connection; callers only
+    /// use <see cref="Connection"/>, so nothing else changes.
+    /// </remarks>
     public static class SessionBus
     {
         /// <summary>The shared session connection, or null when there's no session bus (a bare SSH login, a container).</summary>

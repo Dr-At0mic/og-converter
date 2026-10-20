@@ -1,0 +1,78 @@
+<v:DialogWindow xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:c="using:OgConverter.Controls"
+                xmlns:v="using:OgConverter.Views"
+                x:Class="OgConverter.Views.CropDialog"
+                Title="Crop" Width="980" Height="760" MinWidth="680" MinHeight="520"
+                SizeToContent="Manual" CanResize="True">
+
+    <Window.Styles>
+        <Style Selector="WrapPanel#RatioPanel > RadioButton">
+            <Setter Property="Theme" Value="{StaticResource PresetChip}" />
+            <Setter Property="GroupName" Value="Ratio" />
+        </Style>
+    </Window.Styles>
+
+    <Border Classes="DialogCard">
+        <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
+            <!-- Header (drag to move) -->
+            <Grid Classes="DialogHeader" ColumnDefinitions="Auto,*" Margin="24,20,24,14" PointerPressed="OnHeaderPointerPressed">
+                <Border Classes="DialogBadge" Background="{DynamicResource ModeToolsSubtleBrush}">
+                    <TextBlock Text="{c:Icon E7A8}" Classes="Icon" Foreground="{DynamicResource ModeToolsBrush}" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TitleText" Text="Crop image" Classes="H2" />
+                    <TextBlock x:Name="FileInfoText" Classes="Caption" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Preview -->
+            <Border Grid.Row="1" Background="{DynamicResource WindowBrush}" CornerRadius="8" Margin="24,0">
+                <Grid>
+                    <c:CropCanvas x:Name="Cropper" SelectionChanged="OnSelectionChanged" />
+                    <TextBlock x:Name="StatusText" Text="Loading preview…" Classes="Caption"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420" />
+                </Grid>
+            </Border>
+
+            <!-- Video: which frame to preview -->
+            <Grid x:Name="FramePanel" Grid.Row="2" Margin="24,12,24,0" IsVisible="False" ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Text="Preview frame" Classes="Caption" VerticalAlignment="Center" Margin="0,0,12,0" />
+                <Slider x:Name="FrameSlider" Grid.Column="1" VerticalAlignment="Center" ValueChanged="OnFrameSliderChanged" />
+                <TextBlock x:Name="FrameTimeText" Grid.Column="2" Classes="Caption Mono" VerticalAlignment="Center" Margin="12,0,0,0"
+                           MinWidth="64" TextAlignment="Right" />
+            </Grid>
+
+            <!-- Aspect ratio + size -->
+            <Grid Grid.Row="3" Margin="24,14,24,0" ColumnDefinitions="*,Auto">
+                <WrapPanel x:Name="RatioPanel" VerticalAlignment="Center">
+                    <RadioButton Content="Free" Tag="free" IsChecked="True" IsCheckedChanged="OnRatioChecked" />
+                    <RadioButton Content="Original" Tag="original" IsCheckedChanged="OnRatioChecked" />
+                    <RadioButton Content="Square" Tag="1:1" IsCheckedChanged="OnRatioChecked" />
+                    <RadioButton Content="4:3" Tag="4:3" IsCheckedChanged="OnRatioChecked" />
+                    <RadioButton Content="3:2" Tag="3:2" IsCheckedChanged="OnRatioChecked" />
+                    <RadioButton Content="16:9" Tag="16:9" IsCheckedChanged="OnRatioChecked" />
+                    <RadioButton Content="4:5" Tag="4:5" IsCheckedChanged="OnRatioChecked" />
+                    <RadioButton Content="9:16" Tag="9:16" IsCheckedChanged="OnRatioChecked" />
+                </WrapPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,2,0,0">
+                    <TextBlock x:Name="SizeText" Classes="Mono" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,10,0" />
+                    <Button Theme="{StaticResource GhostButton}" Content="Reset" Click="OnResetClick" FontSize="12" ToolTip.Tip="Select the whole picture again" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Footer -->
+            <Border Grid.Row="4" Classes="DialogFooter" Margin="0,10,0,0">
+                <Grid>
+                    <TextBlock Classes="Caption" VerticalAlignment="Center" FontSize="11.5" Margin="0,0,220,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                               Text="Drag the handles or draw a new box  ·  Arrow keys nudge (Shift = 10 px)  ·  Enter crops" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Cancel" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
+                        <Button x:Name="ConfirmButton" Theme="{StaticResource AccentButton}" Content="Crop" IsDefault="True" Click="OnConfirmClick" MinWidth="88" IsEnabled="False" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</v:DialogWindow>
