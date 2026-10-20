@@ -69,15 +69,10 @@ namespace OgConverter.Services
 
         public static async Task PrintAsync(string htmlPath, string pdfPath)
         {
-            if (File.Exists(pdfPath)) File.Delete(pdfPath);
             using var site = MakeReadable(Path.GetDirectoryName(Path.GetFullPath(htmlPath))!);
             string page = Path.Combine(site.Path, Path.GetFileName(htmlPath));
-            await WriteThroughWorkFolderAsync(pdfPath, output =>
+            await WriteThroughWorkFolderAsync(pdfPath, "The browser didn't produce a PDF", output =>
                 RunAsync(new[] { "--no-pdf-header-footer", "--print-to-pdf=" + output, new Uri(page).AbsoluteUri }));
-            if (!File.Exists(pdfPath) || new FileInfo(pdfPath).Length == 0)
-            {
-                throw new InvalidOperationException("The browser didn't produce a PDF.");
-            }
         }
 
         /// <summary>
@@ -224,15 +219,14 @@ namespace OgConverter.Services
         /// <summary>The page's full width and height in CSS pixels, or null if the page blocked the measuring script.</summary>
         private static async Task<(int Width, int Height)?> MeasureAsync(string page, int width)
         {
-            string dom = await RunAsync(new[] { $"--window-size={width},800", "--dump-dom", new Uri(page).AbsoluteUri });
-            var m = Regex.Match(dom, "data-ogc-size=\"(\\d+)x(\\d+)\"");
+            var run = await RunAsync(new[] { $"--window-size={width},800", "--dump-dom", new Uri(page).AbsoluteUri });
+            var m = Regex.Match(run.Output, "data-ogc-size=\"(\\d+)x(\\d+)\"");
             return m.Success ? (int.Parse(m.Groups[1].Value), int.Parse(m.Groups[2].Value)) : null;
         }
 
         private static async Task CaptureAsync(string page, string pngPath, int width, int height, double scale, bool transparent, int loadLimitMs = PageLoadLimitMs)
         {
-            if (File.Exists(pngPath)) File.Delete(pngPath);
-            await WriteThroughWorkFolderAsync(pngPath, output =>
+            await WriteThroughWorkFolderAsync(pngPath, "The browser didn't produce a picture", output =>
             {
                 var args = new List<string>
                 {
@@ -244,11 +238,6 @@ namespace OgConverter.Services
                 args.Add(new Uri(page).AbsoluteUri);
                 return RunAsync(args, loadLimitMs);
             });
-
-            if (!File.Exists(pngPath) || new FileInfo(pngPath).Length == 0)
-            {
-                throw new InvalidOperationException("The browser didn't produce a picture.");
-            }
         }
 
         /// <summary>
@@ -321,30 +310,41 @@ namespace OgConverter.Services
         }
 
         /// <summary>
-        /// Lets the browser write <paramref name="target"/>. A snap browser can only write inside the home folder, so it
-        /// writes into <see cref="WorkFolder"/> and the result is moved into place.
+        /// Lets the browser write <paramref name="target"/>. It writes a private file in <see cref="WorkFolder"/> (the only
+        /// place a snap browser can write), which is moved into place: two jobs given the same output name can't delete
+        /// each other's result. A browser that exits without writing anything gets one more try; if that fails too, the
+        /// error says why when the browser did.
         /// </summary>
-        private static async Task WriteThroughWorkFolderAsync(string target, Func<string, Task> run)
+        private static async Task WriteThroughWorkFolderAsync(string target, string failure, Func<string, Task<BrowserRun>> run)
         {
-            if (Snap.Value == null)
-            {
-                await run(target);
-                return;
-            }
             string output = Path.Combine(WorkFolder, $"ogc-out-{Guid.NewGuid():N}{Path.GetExtension(target)}");
             try
             {
-                await run(output);
-                if (File.Exists(output)) File.Move(output, target, overwrite: true);
+                BrowserRun result = default;
+                for (int attempt = 0; attempt < 2 && !HasContent(output); attempt++)
+                {
+                    TryDelete(output);
+                    result = await run(output);
+                }
+                if (!HasContent(output))
+                {
+                    throw new InvalidOperationException(result.Problem is { } why ? $"{failure} ({why})." : failure + ".");
+                }
+                File.Move(output, target, overwrite: true);
             }
             finally
             {
                 TryDelete(output);
             }
+
+            static bool HasContent(string path) => File.Exists(path) && new FileInfo(path).Length > 0;
         }
 
+        /// <summary>What the browser printed, and why it failed when it says so (exit code and its last error line).</summary>
+        private readonly record struct BrowserRun(string Output, string? Problem);
+
         /// <summary>Runs the browser headless with a throwaway profile and returns what it printed.</summary>
-        private static async Task<string> RunAsync(IEnumerable<string> args, int loadLimitMs = PageLoadLimitMs)
+        private static async Task<BrowserRun> RunAsync(IEnumerable<string> args, int loadLimitMs = PageLoadLimitMs)
         {
             string browser = Browser.Value ?? throw new InvalidOperationException(MissingBrowserHint);
 
@@ -379,7 +379,13 @@ namespace OgConverter.Services
 
                 // A helper process (the crash reporter) can hold the output pipes open after the browser itself has exited
                 await Task.WhenAny(Task.WhenAll(stdout, stderr), Task.Delay(TimeSpan.FromSeconds(3)));
-                return stdout.IsCompletedSuccessfully ? stdout.Result : "";
+                string output = stdout.IsCompletedSuccessfully ? stdout.Result : "";
+                string? lastError = stderr.IsCompletedSuccessfully
+                    ? stderr.Result.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault()
+                    : null;
+                if (lastError is { Length: > 200 }) lastError = lastError[..200] + "…";
+                string? problem = p.ExitCode != 0 ? $"exit code {p.ExitCode}{(lastError != null ? ": " + lastError : "")}" : lastError;
+                return new BrowserRun(output, problem);
             }
             finally
             {
