@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using PixelRect = OgConverter.Models.PixelRect;
 
 namespace OgConverter.Controls
@@ -12,12 +13,15 @@ namespace OgConverter.Controls
     /// <summary>
     /// Shows an image fitted to the control with a crop rectangle on top: drag inside to move it, drag a handle
     /// to resize it, drag outside it to draw a new one. The selection is kept in image pixels.
+    /// Ctrl+scroll zooms in at the pointer; scroll, Shift+scroll, the middle button or Space+drag pan.
     /// </summary>
     public class CropCanvas : Control
     {
         private const double Pad = 14;
         private const double HandleHit = 12;
         private const double MinSize = 8;
+        private const double MaxPixelScale = 8;
+        private const double ScrollStep = 80;
 
         private enum Hit { None, Move, N, S, E, W, NE, NW, SE, SW, Draw }
 
@@ -29,6 +33,14 @@ namespace OgConverter.Controls
         private Point _dragStart;
         private Rect _selAtStart;
         private Point _anchor;
+        private Point _lastPointer;
+
+        private double _zoom = 1;
+        private Point _view;
+        private bool _panning;
+        private bool _spaceDown;
+        private Point _panLast;
+        private readonly DispatcherTimer _autoScroll = new() { Interval = TimeSpan.FromMilliseconds(30) };
 
         private static readonly IBrush Dim = new ImmutableSolidColorBrush(Color.FromArgb(0x99, 0, 0, 0));
         private static readonly IPen BorderPen = new ImmutablePen(Brushes.White.ToImmutable(), 1.5);
@@ -39,11 +51,15 @@ namespace OgConverter.Controls
 
         public event EventHandler? SelectionChanged;
 
+        /// <summary>The zoom or the visible part of the picture changed.</summary>
+        public event EventHandler? ViewChanged;
+
         public CropCanvas()
         {
             Focusable = true;
             ClipToBounds = true;
             RenderOptions.SetBitmapInterpolationMode(this, BitmapInterpolationMode.HighQuality);
+            _autoScroll.Tick += OnAutoScroll;
         }
 
         public Bitmap? Source
@@ -53,7 +69,10 @@ namespace OgConverter.Controls
             {
                 _source = value;
                 _aspect = null;
+                _zoom = 1;
+                _view = new Point(ImageWidth / 2.0, ImageHeight / 2.0);
                 Reset();
+                ViewChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -132,17 +151,93 @@ namespace OgConverter.Controls
             SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
+        // ---- Zoom -------------------------------------------------------------------------------------------
+
+        /// <summary>Screen pixels per image pixel (1 = 100%).</summary>
+        public double PixelScale => Scale;
+
+        public bool CanZoomIn => _source != null && _zoom < MaxZoom - 0.001;
+        public bool CanZoomOut => _zoom > 1.001;
+
+        /// <summary>
+        /// Zooms by <paramref name="factor"/>, keeping the picture's point under <paramref name="at"/> (control
+        /// coordinates; the middle of the view when null) where it is. Never smaller than the whole picture.
+        /// </summary>
+        public void ZoomBy(double factor, Point? at = null)
+        {
+            if (_source == null) return;
+            var p = at ?? new Point(Bounds.Width / 2, Bounds.Height / 2);
+            var img = ImageRect;
+            double s = Scale;
+            var q = new Point((p.X - img.X) / s, (p.Y - img.Y) / s);
+            _zoom = Math.Clamp(_zoom * factor, 1, MaxZoom);
+            double s2 = Scale;
+            SetView(new Point(q.X - (p.X - Bounds.Width / 2) / s2, q.Y - (p.Y - Bounds.Height / 2) / s2));
+        }
+
+        /// <summary>Shows the whole picture.</summary>
+        public void ZoomToFit()
+        {
+            _zoom = 1;
+            SetView(new Point(ImageWidth / 2.0, ImageHeight / 2.0));
+        }
+
+        /// <summary>Fills the view's width with the picture, at the top of the selection: for long pages and screenshots.</summary>
+        public void ZoomToWidth()
+        {
+            if (_source == null) return;
+            _zoom = Math.Clamp((Bounds.Width - 2 * Pad) / ImageWidth / FitScale, 1, MaxZoom);
+            SetView(new Point(ImageWidth / 2.0, _sel.Top + (Bounds.Height / 2 - Pad) / Scale));
+        }
+
+        /// <summary>Moves the visible part of the picture by screen pixels.</summary>
+        public void PanBy(double dx, double dy)
+        {
+            if (_source == null) return;
+            double s = Scale;
+            var v = ClampView(_view, s);
+            SetView(new Point(v.X + dx / s, v.Y + dy / s));
+        }
+
+        private void SetView(Point view)
+        {
+            _view = ClampView(view, Scale);
+            InvalidateVisual();
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>A picture smaller than the view stays centred; a larger one can't be scrolled past its edges.</summary>
+        private Point ClampView(Point v, double s)
+        {
+            double halfW = Math.Max(0, Bounds.Width / 2 - Pad), halfH = Math.Max(0, Bounds.Height / 2 - Pad);
+            double x = ImageWidth * s <= 2 * halfW ? ImageWidth / 2.0 : Math.Clamp(v.X, halfW / s, ImageWidth - halfW / s);
+            double y = ImageHeight * s <= 2 * halfH ? ImageHeight / 2.0 : Math.Clamp(v.Y, halfH / s, ImageHeight - halfH / s);
+            return new Point(x, y);
+        }
+
+        protected override void OnSizeChanged(SizeChangedEventArgs e)
+        {
+            base.OnSizeChanged(e);
+            ViewChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         // ---- Layout -----------------------------------------------------------------------------------------
 
-        private double Scale => _source == null ? 1
-            : Math.Max(0.0001, Math.Min(Math.Min((Bounds.Width - 2 * Pad) / ImageWidth, (Bounds.Height - 2 * Pad) / ImageHeight), 8));
+        /// <summary>The scale that shows the whole picture (at most 8×).</summary>
+        private double FitScale => _source == null ? 1
+            : Math.Max(0.0001, Math.Min(Math.Min((Bounds.Width - 2 * Pad) / ImageWidth, (Bounds.Height - 2 * Pad) / ImageHeight), MaxPixelScale));
+
+        private double MaxZoom => Math.Max(1, MaxPixelScale / FitScale);
+
+        private double Scale => FitScale * _zoom;
 
         private Rect ImageRect
         {
             get
             {
-                double s = Scale, w = ImageWidth * s, h = ImageHeight * s;
-                return new Rect((Bounds.Width - w) / 2, (Bounds.Height - h) / 2, w, h);
+                double s = Scale;
+                var v = ClampView(_view, s);
+                return new Rect(Bounds.Width / 2 - v.X * s, Bounds.Height / 2 - v.Y * s, ImageWidth * s, ImageHeight * s);
             }
         }
 
@@ -168,7 +263,7 @@ namespace OgConverter.Controls
             if (_source == null) return;
 
             var img = ImageRect;
-            DrawChecker(dc, img);
+            DrawChecker(dc, img.Intersect(new Rect(Bounds.Size)));
             dc.DrawImage(_source, new Rect(0, 0, ImageWidth, ImageHeight), img);
 
             var sel = ToScreen(_sel);
@@ -192,9 +287,10 @@ namespace OgConverter.Controls
             }
         }
 
-        /// <summary>Grey checkerboard behind transparent images.</summary>
+        /// <summary>Grey checkerboard behind transparent images (only the visible part of the picture).</summary>
         private static void DrawChecker(DrawingContext dc, Rect area)
         {
+            if (area.Width <= 0 || area.Height <= 0) return;
             dc.DrawRectangle(CheckerLight, null, area);
             using (dc.PushClip(area))
             {
@@ -244,10 +340,51 @@ namespace OgConverter.Controls
             _ => StandardCursorType.Arrow
         };
 
+        protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
+        {
+            base.OnPointerWheelChanged(e);
+            if (_source == null) return;
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control)) ZoomBy(Math.Pow(1.25, e.Delta.Y), e.GetPosition(this));
+            // Shift+scroll and horizontal scrolling (touchpads) pan sideways
+            else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift)) PanBy(-e.Delta.Y * ScrollStep, 0);
+            else PanBy(-e.Delta.X * ScrollStep, -e.Delta.Y * ScrollStep);
+            e.Handled = true;
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.Key == Key.Space) _spaceDown = true;
+        }
+
+        protected override void OnKeyUp(KeyEventArgs e)
+        {
+            base.OnKeyUp(e);
+            if (e.Key == Key.Space) _spaceDown = false;
+        }
+
+        protected override void OnLostFocus(FocusChangedEventArgs e)
+        {
+            base.OnLostFocus(e);
+            _spaceDown = false;
+        }
+
         protected override void OnPointerPressed(PointerPressedEventArgs e)
         {
             base.OnPointerPressed(e);
-            if (_source == null || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+            if (_source == null) return;
+            var props = e.GetCurrentPoint(this).Properties;
+            if (props.IsMiddleButtonPressed || (props.IsLeftButtonPressed && _spaceDown))
+            {
+                Focus();
+                _panning = true;
+                _panLast = e.GetPosition(this);
+                Cursor = new Cursor(StandardCursorType.SizeAll);
+                e.Pointer.Capture(this);
+                e.Handled = true;
+                return;
+            }
+            if (!props.IsLeftButtonPressed) return;
             Focus();
 
             var p = e.GetPosition(this);
@@ -266,6 +403,8 @@ namespace OgConverter.Controls
                 _ => default
             };
             e.Pointer.Capture(this);
+            _lastPointer = p;
+            _autoScroll.Start();
             e.Handled = true;
         }
 
@@ -275,12 +414,41 @@ namespace OgConverter.Controls
             if (_source == null) return;
 
             var p = e.GetPosition(this);
+            if (_panning)
+            {
+                PanBy(_panLast.X - p.X, _panLast.Y - p.Y);
+                _panLast = p;
+                return;
+            }
             if (_drag == Hit.None)
             {
                 Cursor = new Cursor(CursorFor(HitTest(p)));
                 return;
             }
 
+            _lastPointer = p;
+            ApplyDrag(p);
+        }
+
+        /// <summary>While a handle is dragged past the edge of the view, the picture scrolls toward it.</summary>
+        private void OnAutoScroll(object? sender, EventArgs e)
+        {
+            if (_drag == Hit.None)
+            {
+                _autoScroll.Stop();
+                return;
+            }
+            double dx = Overshoot(_lastPointer.X, Bounds.Width), dy = Overshoot(_lastPointer.Y, Bounds.Height);
+            if (dx == 0 && dy == 0) return;
+            var before = ImageRect;
+            PanBy(Math.Clamp(dx, -60, 60) * 0.5, Math.Clamp(dy, -60, 60) * 0.5);
+            if (ImageRect != before) ApplyDrag(_lastPointer);
+
+            static double Overshoot(double v, double size) => v < Pad ? v - Pad : v > size - Pad ? v - (size - Pad) : 0;
+        }
+
+        private void ApplyDrag(Point p)
+        {
             var q = ToImage(p);
             switch (_drag)
             {
@@ -299,11 +467,20 @@ namespace OgConverter.Controls
         protected override void OnPointerReleased(PointerReleasedEventArgs e)
         {
             base.OnPointerReleased(e);
+            if (_panning)
+            {
+                _panning = false;
+                e.Pointer.Capture(null);
+                Cursor = new Cursor(CursorFor(HitTest(e.GetPosition(this))));
+                e.Handled = true;
+                return;
+            }
             if (_drag == Hit.None) return;
 
             // A click without a drag outside the selection shouldn't collapse it to nothing
             if (_drag == Hit.Draw && (_sel.Width < MinSize || _sel.Height < MinSize)) SetSelection(_selAtStart);
             _drag = Hit.None;
+            _autoScroll.Stop();
             e.Pointer.Capture(null);
         }
 

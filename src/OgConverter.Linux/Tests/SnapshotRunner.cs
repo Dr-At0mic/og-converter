@@ -154,6 +154,11 @@ namespace OgConverter.Tests
                 Task.Run(() => MediaToolkit.RunAsync(ffmpeg, new[] { "-y", "-f", "lavfi", "-i", "testsrc2=s=1600x1000", "-frames:v", "1", photo })).GetAwaiter().GetResult();
                 Snap(() => new CropDialog(photo, isVideo: false, ffmpeg), "dialog_crop_image.png",
                      d => d.RatioPanel.Children.OfType<RadioButton>().First(r => (string?)r.Content == "16:9").IsChecked = true, wait: TimeSpan.FromSeconds(3));
+
+                // A long page (a README saved as one picture), zoomed to its width
+                string page = Path.Combine(outDir, "Long page.png");
+                Task.Run(() => MediaToolkit.RunAsync(ffmpeg, new[] { "-y", "-f", "lavfi", "-i", "testsrc2=s=980x6000", "-frames:v", "1", page })).GetAwaiter().GetResult();
+                Snap(() => new CropDialog(page, isVideo: false, ffmpeg), "dialog_crop_long.png", d => d.Cropper.ZoomToWidth(), wait: TimeSpan.FromSeconds(3));
                 Snap(() => new CropDialog(mp4, isVideo: true, ffmpeg), "dialog_crop_video.png",
                      d => d.Cropper.SetSelection(new Rect(400, 150, 900, 700)), wait: TimeSpan.FromSeconds(3));
                 Snap(() => new TrimDialog(mp4, ffmpeg), "dialog_trim.png", d => d.Timeline.SetRange(0.8, 2.2), wait: TimeSpan.FromSeconds(3));

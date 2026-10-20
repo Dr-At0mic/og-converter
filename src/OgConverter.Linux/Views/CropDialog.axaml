@@ -29,7 +29,7 @@
             <!-- Preview -->
             <Border Grid.Row="1" Background="{DynamicResource WindowBrush}" CornerRadius="8" Margin="24,0">
                 <Grid>
-                    <c:CropCanvas x:Name="Cropper" SelectionChanged="OnSelectionChanged" />
+                    <c:CropCanvas x:Name="Cropper" SelectionChanged="OnSelectionChanged" ViewChanged="OnViewChanged" />
                     <TextBlock x:Name="StatusText" Text="Loading preview…" Classes="Caption"
                                HorizontalAlignment="Center" VerticalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center" MaxWidth="420" />
                 </Grid>
@@ -56,6 +56,16 @@
                     <RadioButton Content="9:16" Tag="9:16" IsCheckedChanged="OnRatioChecked" />
                 </WrapPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="12,2,0,0">
+                    <!-- Zoom: long pictures (a README saved as one image) are a thin strip when shown whole -->
+                    <Button x:Name="ZoomOutButton" Theme="{StaticResource GhostButton}" Content="−" Click="OnZoomOutClick" FontSize="13" MinWidth="28"
+                            ToolTip.Tip="Zoom out (Ctrl+−)" />
+                    <TextBlock x:Name="ZoomText" Classes="Mono" FontSize="12" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextSecondaryBrush}" MinWidth="42" TextAlignment="Center" />
+                    <Button x:Name="ZoomInButton" Theme="{StaticResource GhostButton}" Content="+" Click="OnZoomInClick" FontSize="13" MinWidth="28"
+                            ToolTip.Tip="Zoom in (Ctrl+= or Ctrl+scroll)" />
+                    <Button Theme="{StaticResource GhostButton}" Content="Fit" Click="OnZoomFitClick" FontSize="12" ToolTip.Tip="Show the whole picture (Ctrl+0)" />
+                    <Button Theme="{StaticResource GhostButton}" Content="Width" Click="OnZoomWidthClick" FontSize="12" Margin="0,0,14,0"
+                            ToolTip.Tip="Fill the width and go to the top of the selection: for long pictures" />
                     <TextBlock x:Name="SizeText" Classes="Mono" FontSize="12" VerticalAlignment="Center"
                                Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,10,0" />
                     <Button Theme="{StaticResource GhostButton}" Content="Reset" Click="OnResetClick" FontSize="12" ToolTip.Tip="Select the whole picture again" />
@@ -66,7 +76,7 @@
             <Border Grid.Row="4" Classes="DialogFooter" Margin="0,10,0,0">
                 <Grid>
                     <TextBlock Classes="Caption" VerticalAlignment="Center" FontSize="11.5" Margin="0,0,220,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
-                               Text="Drag the handles or draw a new box  ·  Arrow keys nudge (Shift = 10 px)  ·  Enter crops" />
+                               Text="Drag the handles or draw a new box  ·  Ctrl+scroll zooms, scroll pans  ·  Arrow keys nudge (Shift = 10 px)  ·  Enter crops" />
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                         <Button Content="Cancel" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
                         <Button x:Name="ConfirmButton" Theme="{StaticResource AccentButton}" Content="Crop" IsDefault="True" Click="OnConfirmClick" MinWidth="88" IsEnabled="False" />

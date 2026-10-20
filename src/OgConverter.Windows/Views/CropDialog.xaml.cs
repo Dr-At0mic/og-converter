@@ -151,9 +151,34 @@ namespace OgConverter.Views
 
         private void OnResetClick(object sender, RoutedEventArgs e) => Cropper.Reset();
 
+        private void OnViewChanged(object? sender, EventArgs e)
+        {
+            ZoomText.Text = Cropper.Source == null ? "" : $"{Cropper.PixelScale * 100:0}%";
+            ZoomInButton.IsEnabled = Cropper.CanZoomIn;
+            ZoomOutButton.IsEnabled = Cropper.CanZoomOut;
+        }
+
+        private void OnZoomInClick(object sender, RoutedEventArgs e) => Cropper.ZoomBy(1.5);
+        private void OnZoomOutClick(object sender, RoutedEventArgs e) => Cropper.ZoomBy(1 / 1.5);
+        private void OnZoomFitClick(object sender, RoutedEventArgs e) => Cropper.ZoomToFit();
+        private void OnZoomWidthClick(object sender, RoutedEventArgs e) => Cropper.ZoomToWidth();
+
         private void OnPreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (Cropper.Source == null || FrameSlider.IsKeyboardFocusWithin) return;
+
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            {
+                switch (e.Key)
+                {
+                    case Key.OemPlus or Key.Add: Cropper.ZoomBy(1.5); break;
+                    case Key.OemMinus or Key.Subtract: Cropper.ZoomBy(1 / 1.5); break;
+                    case Key.D0 or Key.NumPad0: Cropper.ZoomToFit(); break;
+                    default: return;
+                }
+                e.Handled = true;
+                return;
+            }
 
             double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
             (double dx, double dy) = e.Key switch
