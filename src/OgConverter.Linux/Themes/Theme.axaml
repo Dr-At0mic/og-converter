@@ -1,0 +1,567 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:c="using:OgConverter.Controls"
+                    xmlns:ic="using:OgConverter.Icons">
+
+    <!-- ===================================================================
+         OG Converter design system (Linux port of the Windows Theme.xaml)
+         Graphite surfaces, one accent, Inter + the bundled icon font.
+         The palette entries are defaults: AppThemeService replaces them from the
+         active wheel template, so every color is referenced as DynamicResource.
+         =================================================================== -->
+
+    <!-- Palette -->
+    <Color x:Key="AccentColor">#FF6B35</Color>
+    <SolidColorBrush x:Key="WindowBrush" Color="#0D0E12" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#15171C" />
+    <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="#1C1E24" />
+    <SolidColorBrush x:Key="SurfaceHoverBrush" Color="#23262D" />
+    <SolidColorBrush x:Key="SurfacePressedBrush" Color="#2A2D35" />
+    <SolidColorBrush x:Key="InputBrush" Color="#101216" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#25282F" />
+    <SolidColorBrush x:Key="BorderStrongBrush" Color="#33363F" />
+    <SolidColorBrush x:Key="DividerBrush" Color="#1F2128" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="#ECEDEF" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="#A1A6B0" />
+    <SolidColorBrush x:Key="TextTertiaryBrush" Color="#6C717C" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#FF6B35" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF7F50" />
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#E85A27" />
+    <SolidColorBrush x:Key="AccentSubtleBrush" Color="#1FFF6B35" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="#3DD68C" />
+    <SolidColorBrush x:Key="SuccessSubtleBrush" Color="#1A3DD68C" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#F2555A" />
+    <SolidColorBrush x:Key="DangerSubtleBrush" Color="#1AF2555A" />
+    <SolidColorBrush x:Key="WarningBrush" Color="#F5B83D" />
+    <SolidColorBrush x:Key="WarningSubtleBrush" Color="#1AF5B83D" />
+    <SolidColorBrush x:Key="ModeConvertBrush" Color="#FF6B35" />
+    <SolidColorBrush x:Key="ModeToolsBrush" Color="#3B9EFF" />
+    <SolidColorBrush x:Key="ModeActionsBrush" Color="#A78BFA" />
+    <SolidColorBrush x:Key="AccentFaintBrush" Color="#14FF6B35" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="ModeConvertSubtleBrush" Color="#1FFF6B35" />
+    <SolidColorBrush x:Key="ModeToolsSubtleBrush" Color="#1F3B9EFF" />
+    <SolidColorBrush x:Key="ModeActionsSubtleBrush" Color="#1FA78BFA" />
+    <SolidColorBrush x:Key="HoverTintBrush" Color="#1AFFFFFF" />
+    <SolidColorBrush x:Key="PressTintBrush" Color="#10FFFFFF" />
+    <SolidColorBrush x:Key="DropZoneBrush" Color="#08FFFFFF" />
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="#3A3D46" />
+    <SolidColorBrush x:Key="ScrollThumbHoverBrush" Color="#50545F" />
+    <SolidColorBrush x:Key="PopupBrush" Color="#1A1C22" />
+    <LinearGradientBrush x:Key="BrandBrush" StartPoint="0%,0%" EndPoint="100%,100%">
+        <GradientStop Color="#FF8A55" Offset="0" />
+        <GradientStop Color="#F2541B" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- Inter ships with the app (Avalonia.Fonts.Inter, OFL); Segoe UI isn't on Linux -->
+    <FontFamily x:Key="UiFont">avares://Avalonia.Fonts.Inter/Assets#Inter</FontFamily>
+    <FontFamily x:Key="MonoFont">Cascadia Mono, DejaVu Sans Mono, Ubuntu Mono, Liberation Mono, monospace</FontFamily>
+
+    <CornerRadius x:Key="CardRadius">10</CornerRadius>
+    <CornerRadius x:Key="ControlRadius">6</CornerRadius>
+
+    <BoxShadows x:Key="FlyoutShadow">0 8 28 0 #73000000</BoxShadows>
+
+    <!-- ============================== Buttons ============================== -->
+    <ControlTheme x:Key="{x:Type Button}" TargetType="Button">
+        <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="14,6" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlRadius}" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ContentPresenter Name="PART_ContentPresenter"
+                                  Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}"
+                                  Padding="{TemplateBinding Padding}" Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                  VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"
+                                  RecognizesAccessKey="True" />
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfacePressedBrush}" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.4" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentHoverBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentHoverBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentPressedBrush}" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="GhostButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="Padding" Value="10,5" />
+    </ControlTheme>
+
+    <!-- Square icon-only button; put a glyph in Content (through {c:Icon}) -->
+    <ControlTheme x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+        <Setter Property="FontFamily" Value="{x:Static ic:Icons.Font}" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="Padding" Value="0" />
+    </ControlTheme>
+
+    <!-- Plain text link (About page) -->
+    <ControlTheme x:Key="LinkButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ContentPresenter Name="PART_ContentPresenter" Background="{TemplateBinding Background}" Content="{TemplateBinding Content}"
+                                  Padding="{TemplateBinding Padding}" />
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+            <Setter Property="Opacity" Value="0.8" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="CaptionButton" TargetType="Button">
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="44" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="FontFamily" Value="{x:Static ic:Icons.Font}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ContentPresenter Name="PART_ContentPresenter" Background="{TemplateBinding Background}" Content="{TemplateBinding Content}"
+                                  HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource HoverTintBrush}" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PressTintBrush}" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="CaptionCloseButton" TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+        <Style Selector="^:pointerover">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#C42B1C" />
+        </Style>
+        <Style Selector="^:pressed /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="#A32417" />
+        </Style>
+    </ControlTheme>
+
+    <!-- Title bar navigation: icon glyph in Tag, label in Content -->
+    <ControlTheme x:Key="NavTab" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="bd" Background="Transparent" CornerRadius="6" Padding="12,5" Margin="1,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{TemplateBinding Tag}" FontFamily="{x:Static ic:Icons.Font}" FontSize="13"
+                                   VerticalAlignment="Center" Margin="0,1,8,0" />
+                        <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#bd">
+            <Setter Property="Background" Value="{DynamicResource HoverTintBrush}" />
+        </Style>
+        <Style Selector="^:checked">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#bd">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============================== Toggles ============================== -->
+    <ControlTheme x:Key="{x:Type CheckBox}" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid ColumnDefinitions="Auto,*" Background="{TemplateBinding Background}">
+                    <Border Name="box" Width="18" Height="18" CornerRadius="4" BorderThickness="1" VerticalAlignment="Top" Margin="0,1,0,0"
+                            BorderBrush="{DynamicResource BorderStrongBrush}" Background="{DynamicResource InputBrush}">
+                        <Path Name="check" Data="M 3.5 9 L 7.5 13 L 14.5 5" Stroke="{DynamicResource OnAccentBrush}" StrokeThickness="1.8"
+                              StrokeLineCap="Round" StrokeJoin="Round" IsVisible="False" Margin="-1" />
+                    </Border>
+                    <ContentPresenter Name="PART_ContentPresenter" Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center"
+                                      Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      IsVisible="{TemplateBinding Content, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#box">
+            <Setter Property="BorderBrush" Value="{DynamicResource TextTertiaryBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#box">
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Path#check">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+    </ControlTheme>
+
+    <!-- On/off switch for settings, on a CheckBox -->
+    <ControlTheme x:Key="ToggleSwitch" TargetType="CheckBox">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Background="{TemplateBinding Background}" Width="40" Height="20">
+                    <Border Name="track" CornerRadius="10" BorderThickness="1"
+                            BorderBrush="{DynamicResource TextTertiaryBrush}" Background="Transparent" />
+                    <Ellipse Name="knob" Width="12" Height="12" Fill="{DynamicResource TextSecondaryBrush}"
+                             HorizontalAlignment="Left" Margin="4,0,0,0">
+                        <Ellipse.Transitions>
+                            <Transitions>
+                                <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                            </Transitions>
+                        </Ellipse.Transitions>
+                    </Ellipse>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^ /template/ Ellipse#knob">
+            <Setter Property="RenderTransform" Value="translateX(0px)" />
+        </Style>
+        <Style Selector="^:checked /template/ Ellipse#knob">
+            <Setter Property="RenderTransform" Value="translateX(20px)" />
+            <Setter Property="Fill" Value="White" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#track">
+            <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Ellipse#knob">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Margin" Value="3,0,0,0" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type RadioButton}" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <StackPanel Orientation="Horizontal" Background="{TemplateBinding Background}">
+                    <Grid Width="18" Height="18" VerticalAlignment="Center">
+                        <Ellipse Name="ring" Stroke="{DynamicResource BorderStrongBrush}" StrokeThickness="1" Fill="{DynamicResource InputBrush}" />
+                        <Ellipse Name="dot" Width="8" Height="8" Fill="{DynamicResource OnAccentBrush}" IsVisible="False" />
+                    </Grid>
+                    <ContentPresenter Name="PART_ContentPresenter" Margin="10,0,0,0" VerticalAlignment="Center"
+                                      Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" />
+                </StackPanel>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Ellipse#ring">
+            <Setter Property="Stroke" Value="{DynamicResource TextTertiaryBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Ellipse#ring">
+            <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Ellipse#dot">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+    </ControlTheme>
+
+    <!-- Rounded chip (presets, popular formats, aspect ratios) -->
+    <ControlTheme x:Key="PresetChip" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Margin" Value="0,0,6,6" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="bd" Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1" CornerRadius="14" Padding="12,5">
+                    <ContentPresenter Content="{TemplateBinding Content}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#bd">
+            <Setter Property="BorderBrush" Value="{DynamicResource TextTertiaryBrush}" />
+        </Style>
+        <Style Selector="^:checked">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#bd">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        </Style>
+    </ControlTheme>
+
+    <!-- Selectable card with a radio ring (Compress modes, Protect methods) -->
+    <ControlTheme x:Key="ModeCard" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="14,12" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="bd" Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Grid Width="18" Height="18" VerticalAlignment="Top" Margin="0,1,12,0">
+                            <Ellipse Name="ring" Stroke="{DynamicResource BorderStrongBrush}" StrokeThickness="1" Fill="{DynamicResource SurfaceBrush}" />
+                            <Ellipse Name="dot" Width="8" Height="8" Fill="{DynamicResource OnAccentBrush}" IsVisible="False" />
+                        </Grid>
+                        <ContentPresenter Grid.Column="1" Content="{TemplateBinding Content}" />
+                    </Grid>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#bd">
+            <Setter Property="BorderBrush" Value="{DynamicResource TextTertiaryBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Border#bd">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource AccentFaintBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Ellipse#ring">
+            <Setter Property="Fill" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Stroke" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:checked /template/ Ellipse#dot">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+            <Setter Property="Cursor" Value="Arrow" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============================== Slider ============================== -->
+    <ControlTheme x:Key="SliderFillRepeat" TargetType="RepeatButton">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Background="Transparent">
+                    <Border Height="4" CornerRadius="2" Background="{TemplateBinding Background}" VerticalAlignment="Center" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <ControlTheme x:Key="SliderThumb" TargetType="Thumb">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Width="20" Height="20" Background="Transparent">
+                    <Ellipse Fill="{DynamicResource SurfaceRaisedBrush}" Stroke="{DynamicResource BorderStrongBrush}" StrokeThickness="1" />
+                    <Ellipse Name="core" Width="10" Height="10" Fill="{DynamicResource AccentBrush}" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Ellipse#core">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Height" Value="12" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type Slider}" TargetType="Slider">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Height="22" Background="Transparent">
+                    <Track Name="PART_Track" Orientation="Horizontal" IsDirectionReversed="{TemplateBinding IsDirectionReversed}"
+                           Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                           Value="{TemplateBinding Value, Mode=TwoWay}">
+                        <Track.DecreaseButton>
+                            <RepeatButton Name="PART_DecreaseButton" Theme="{StaticResource SliderFillRepeat}" Background="{DynamicResource AccentBrush}" />
+                        </Track.DecreaseButton>
+                        <Track.IncreaseButton>
+                            <RepeatButton Name="PART_IncreaseButton" Theme="{StaticResource SliderFillRepeat}" Background="{DynamicResource BorderStrongBrush}" />
+                        </Track.IncreaseButton>
+                        <Thumb Name="thumb" Theme="{StaticResource SliderThumb}" />
+                    </Track>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============================== ComboBox ============================== -->
+    <ControlTheme x:Key="{x:Type ComboBoxItem}" TargetType="ComboBoxItem">
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid Margin="2,1">
+                    <ContentPresenter Name="PART_ContentPresenter" Background="{TemplateBinding Background}" CornerRadius="4"
+                                      Padding="{TemplateBinding Padding}" VerticalContentAlignment="Center"
+                                      Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    <Border Name="pip" Width="3" Height="14" CornerRadius="1.5" Background="{DynamicResource AccentBrush}"
+                            HorizontalAlignment="Left" IsVisible="False" />
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+        </Style>
+        <Style Selector="^:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+        </Style>
+        <Style Selector="^:selected /template/ Border#pip">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+    </ControlTheme>
+
+    <ControlTheme x:Key="{x:Type ComboBox}" TargetType="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="11,0,30,0" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="MaxDropDownHeight" Value="420" />
+        <Setter Property="ItemsPanel">
+            <ItemsPanelTemplate>
+                <StackPanel />
+            </ItemsPanelTemplate>
+        </Setter>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Grid>
+                    <Border Name="bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{DynamicResource ControlRadius}" />
+                    <ContentPresenter Name="ContentPresenter" IsHitTestVisible="False" Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" HorizontalAlignment="Left"
+                                      Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding ItemTemplate}" />
+                    <TextBlock Name="chevron" Text="{c:Icon E70D}" FontFamily="{x:Static ic:Icons.Font}" FontSize="10" IsHitTestVisible="False"
+                               Foreground="{DynamicResource TextSecondaryBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <Popup Name="PART_Popup" WindowManagerAddShadowHint="False" IsLightDismissEnabled="True"
+                           IsOpen="{TemplateBinding IsDropDownOpen, Mode=TwoWay}" Placement="Bottom" VerticalOffset="4"
+                           MinWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}}"
+                           MaxHeight="{TemplateBinding MaxDropDownHeight}" InheritsTransform="True">
+                        <Border Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource BorderStrongBrush}"
+                                BorderThickness="1" CornerRadius="8" Padding="2,4">
+                            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" />
+                            </ScrollViewer>
+                        </Border>
+                    </Popup>
+                </Grid>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#bd">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+        </Style>
+        <Style Selector="^:dropdownopen /template/ Border#bd">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:focus-visible /template/ Border#bd">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+        <Style Selector="^:disabled">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+    </ControlTheme>
+
+    <!-- ============================== Misc ============================== -->
+    <ControlTheme x:Key="{x:Type ToolTip}" TargetType="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource PopupBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="MaxWidth" Value="420" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"
+                        CornerRadius="6" Padding="9,5">
+                    <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}">
+                        <ContentPresenter.DataTemplates>
+                            <DataTemplate DataType="x:String">
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                            </DataTemplate>
+                        </ContentPresenter.DataTemplates>
+                    </ContentPresenter>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+    <!-- Lists without the default selection highlight -->
+    <ControlTheme x:Key="PlainListItem" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  HorizontalContentAlignment="Stretch" />
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+</ResourceDictionary>

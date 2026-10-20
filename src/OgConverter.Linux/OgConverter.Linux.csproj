@@ -20,11 +20,17 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <!-- The GNOME Shell drag-and-tap extension ships inside the app; Settings › Desktop integration installs it -->
+    <EmbeddedResource Include="..\..\linux\gnome-extension\og-converter@dr-at0mic.github.io\*" LogicalName="gnome-extension/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
+    <!-- UI font (SIL OFL 1.1) -->
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.4" />
+    <!-- og-converter --snapshot: renders the windows to PNG without a display (MIT) -->
+    <PackageReference Include="Avalonia.Headless" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
     <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.1" />
   </ItemGroup>

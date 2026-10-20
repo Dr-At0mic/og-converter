@@ -1,0 +1,749 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:OgConverter.Controls"
+        xmlns:ic="using:OgConverter.Icons"
+        xmlns:m="using:OgConverter.Models"
+        xmlns:wt="using:OgConverter.Models"
+        x:Class="OgConverter.MainWindow"
+        Title="OG Converter"
+        Width="1080" Height="720"
+        MinWidth="900" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBrush}"
+        Foreground="{DynamicResource TextPrimaryBrush}"
+        FontFamily="{StaticResource UiFont}"
+        FontSize="13"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaTitleBarHeightHint="44">
+
+    <Window.Styles>
+        <Style Selector="Border.KeyCap">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+            <Setter Property="BorderThickness" Value="1,1,1,2" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        </Style>
+
+        <!-- Recent activity rows: state comes from the job (IsRunning / IsSuccess) through classes -->
+        <Style Selector="Border.historyRow">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.historyRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        </Style>
+        <Style Selector="Border.historyRow StackPanel.rowActions">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
+        <Style Selector="Border.historyRow:pointerover StackPanel.rowActions">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="Border.historyRow Border.statusBg">
+            <Setter Property="Background" Value="{DynamicResource SuccessSubtleBrush}" />
+        </Style>
+        <Style Selector="Border.historyRow TextBlock.statusIcon">
+            <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
+            <Setter Property="Text" Value="{c:Icon E73E}" />
+        </Style>
+        <Style Selector="Border.historyRow TextBlock.error">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.historyRow Grid.progressPanel">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.historyRow.failed Border.statusBg">
+            <Setter Property="Background" Value="{DynamicResource DangerSubtleBrush}" />
+        </Style>
+        <Style Selector="Border.historyRow.failed TextBlock.statusIcon">
+            <Setter Property="Foreground" Value="{DynamicResource DangerBrush}" />
+            <Setter Property="Text" Value="{c:Icon E711}" />
+        </Style>
+        <Style Selector="Border.historyRow.failed TextBlock.error">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="Border.historyRow.failed TextBlock.detail, Border.historyRow.failed StackPanel.rowActions">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <!-- After the failed styles so it wins while the job is still running -->
+        <Style Selector="Border.historyRow.running Border.statusBg">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        </Style>
+        <Style Selector="Border.historyRow.running TextBlock.statusIcon">
+            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+            <Setter Property="Text" Value="{c:Icon E895}" />
+        </Style>
+        <Style Selector="Border.historyRow.running TextBlock.error, Border.historyRow.running TextBlock.detail, Border.historyRow.running StackPanel.rowActions">
+            <Setter Property="IsVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.historyRow.running Grid.progressPanel">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+    </Window.Styles>
+
+    <Panel>
+        <Grid Background="{DynamicResource WindowBrush}" RowDefinitions="44,*">
+
+            <!-- ============================ Title bar ============================ -->
+            <Border x:Name="TitleBar" Grid.Row="0" BorderBrush="{DynamicResource DividerBrush}" BorderThickness="0,0,0,1" Background="Transparent">
+                <Grid ColumnDefinitions="*,Auto,*">
+                    <!-- Brand -->
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0" IsHitTestVisible="False">
+                        <Border Width="22" Height="22" CornerRadius="6" Margin="0,0,10,0" Background="{DynamicResource BrandBrush}">
+                            <TextBlock Text="OG" Foreground="{DynamicResource OnAccentBrush}" FontWeight="Bold" FontSize="9.5" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="OG Converter" FontWeight="SemiBold" FontSize="13" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Navigation -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <RadioButton x:Name="TabOverview" Theme="{StaticResource NavTab}" Content="Home" Tag="{c:Icon E80F}" IsChecked="True" GroupName="Nav"
+                                     IsCheckedChanged="OnTabNavChanged" />
+                        <RadioButton x:Name="TabSettings" Theme="{StaticResource NavTab}" Content="Settings" Tag="{c:Icon E713}" GroupName="Nav"
+                                     IsCheckedChanged="OnTabNavChanged" />
+                        <RadioButton x:Name="TabAbout" Theme="{StaticResource NavTab}" Content="About" Tag="{c:Icon E946}" GroupName="Nav"
+                                     IsCheckedChanged="OnTabNavChanged" />
+                    </StackPanel>
+
+                    <!-- Utilities + window controls -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top">
+                        <Button Theme="{StaticResource IconButton}" Content="{c:Icon E768}" Click="OnTestWheelClick" ToolTip.Tip="Preview the wheel"
+                                Margin="0,7,2,0" />
+                        <Button Theme="{StaticResource IconButton}" Content="{c:Icon E8A0}" Click="OnMinimizeToTrayClick" ToolTip.Tip="Hide to the system tray (keeps running)"
+                                Margin="0,7,10,0" />
+                        <Border Width="1" Height="18" Background="{DynamicResource BorderBrush}" VerticalAlignment="Top" Margin="0,13,4,0" />
+                        <Button Theme="{StaticResource CaptionButton}" Content="{c:Icon E921}" Click="OnMinimizeWindowClick" ToolTip.Tip="Minimize" />
+                        <Button x:Name="MaximizeBtn" Theme="{StaticResource CaptionButton}" Content="{c:Icon E922}" Click="OnMaximizeWindowClick" ToolTip.Tip="Maximize" />
+                        <Button Theme="{StaticResource CaptionCloseButton}" Content="{c:Icon E8BB}" Click="OnCloseWindowClick" ToolTip.Tip="Close" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ============================ Content ============================ -->
+            <Panel Grid.Row="1">
+
+                <!-- ======================= HOME ======================= -->
+                <Grid x:Name="ViewOverview" Margin="28,24,28,28" RowDefinitions="Auto,Auto,Auto,*">
+
+                    <!-- Page header -->
+                    <Grid Grid.Row="0" Margin="0,0,0,18" ColumnDefinitions="*,Auto">
+                        <StackPanel>
+                            <TextBlock Text="Home" Classes="H1" />
+                            <TextBlock x:Name="HomeSubtitle" Classes="Caption" Margin="0,4,0,0"
+                                       Text="Start dragging any file in Files, then tap a shortcut key to open the wheel." />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="16,4,0,0">
+                            <Border x:Name="KeyMappingNotice" IsVisible="False" Background="{DynamicResource WarningSubtleBrush}"
+                                    CornerRadius="12" Padding="10,4" Margin="0,0,8,0" MaxWidth="380" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{c:Icon E7BA}" Classes="Icon" FontSize="12" Foreground="{DynamicResource WarningBrush}" Margin="0,0,6,0" />
+                                    <TextBlock x:Name="KeyMappingNoticeText" Foreground="{DynamicResource WarningBrush}" FontSize="11.5" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+                            <ComboBox x:Name="TemplateQuickCombo" Width="148" Margin="0,0,10,0" VerticalAlignment="Center"
+                                      SelectionChanged="OnQuickTemplateChanged" ToolTip.Tip="Wheel template: changes the wheel and the app's colors">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="wt:WheelTemplate">
+                                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Border x:Name="ListeningPill" Background="{DynamicResource SuccessSubtleBrush}" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="ListeningDot" Width="7" Height="7" Fill="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,7,0" />
+                                    <TextBlock x:Name="ListeningText" Text="Listening for shortcuts" Foreground="{DynamicResource SuccessBrush}" FontSize="11.5" FontWeight="SemiBold" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Banners: running without installing; drag-and-tap helper not active -->
+                    <StackPanel Grid.Row="1">
+                        <Border x:Name="InstallBanner" IsVisible="False" Background="{DynamicResource AccentFaintBrush}"
+                                BorderBrush="{DynamicResource AccentSubtleBrush}" BorderThickness="1" CornerRadius="{DynamicResource CardRadius}"
+                                Padding="14,10,8,10" Margin="0,0,0,14">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                <TextBlock Text="{c:Icon E896}" Classes="Icon" Foreground="{DynamicResource AccentBrush}" Margin="0,0,12,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Running without installing" FontWeight="SemiBold" />
+                                    <TextBlock Classes="Caption" Margin="0,2,12,0"
+                                               Text="Install to add OG Converter to your app menu and have it waiting in the tray every time you log in. No admin rights needed." />
+                                </StackPanel>
+                                <Button Grid.Column="2" Theme="{StaticResource AccentButton}" Content="Install" Click="OnInstallBannerClick" Padding="16,6" VerticalAlignment="Center" />
+                                <Button Grid.Column="3" Theme="{StaticResource IconButton}" Content="{c:Icon E711}" Click="OnDismissInstallBannerClick"
+                                        ToolTip.Tip="Don't show again (you can install from Settings › System)" Width="30" Height="30" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border x:Name="HelperBanner" IsVisible="False" Background="{DynamicResource WarningSubtleBrush}"
+                                CornerRadius="{DynamicResource CardRadius}" Padding="14,10,8,10" Margin="0,0,0,14">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <TextBlock Text="{c:Icon E7BA}" Classes="Icon" Foreground="{DynamicResource WarningBrush}" Margin="0,0,12,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="HelperBannerTitle" Text="Drag-and-tap needs the GNOME helper" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="HelperBannerText" Classes="Caption" Margin="0,2,12,0" />
+                                </StackPanel>
+                                <Button x:Name="HelperBannerButton" Grid.Column="2" Content="Install helper" Click="OnInstallGnomeHelperClick" Padding="16,6" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Shortcut cards -->
+                    <Grid Grid.Row="2" Margin="0,0,0,16" ColumnDefinitions="*,12,*,12,*">
+                        <Border Grid.Column="0" Classes="Card" Padding="16,14">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource ModeConvertSubtleBrush}" Margin="0,0,12,0">
+                                    <TextBlock Text="{c:Icon E8AB}" Classes="Icon" Foreground="{DynamicResource ModeConvertBrush}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Convert" FontWeight="SemiBold" />
+                                    <TextBlock Text="Change file format" Classes="Caption" FontSize="11.5" Margin="0,1,0,0" />
+                                </StackPanel>
+                                <ComboBox x:Name="ConvertKeyCombo" Grid.Column="2" Width="96" VerticalAlignment="Center" SelectionChanged="OnKeyMappingChanged" ToolTip.Tip="Key that opens the Convert wheel">
+                                    <ComboBoxItem Content="Shift" Tag="Shift" />
+                                    <ComboBoxItem Content="Control" Tag="Control" />
+                                    <ComboBoxItem Content="Alt" Tag="Alt" />
+                                    <ComboBoxItem Content="Super" Tag="Win" />
+                                    <ComboBoxItem Content="Space" Tag="Space" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="2" Classes="Card" Padding="16,14">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource ModeToolsSubtleBrush}" Margin="0,0,12,0">
+                                    <TextBlock Text="{c:Icon E90F}" Classes="Icon" Foreground="{DynamicResource ModeToolsBrush}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Tools" FontWeight="SemiBold" />
+                                    <TextBlock Text="Compress, split, edit" Classes="Caption" FontSize="11.5" Margin="0,1,0,0" />
+                                </StackPanel>
+                                <ComboBox x:Name="ToolsKeyCombo" Grid.Column="2" Width="96" VerticalAlignment="Center" SelectionChanged="OnKeyMappingChanged" ToolTip.Tip="Key that opens the Tools wheel">
+                                    <ComboBoxItem Content="Control" Tag="Control" />
+                                    <ComboBoxItem Content="Shift" Tag="Shift" />
+                                    <ComboBoxItem Content="Alt" Tag="Alt" />
+                                    <ComboBoxItem Content="Super" Tag="Win" />
+                                    <ComboBoxItem Content="Space" Tag="Space" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+
+                        <Border Grid.Column="4" Classes="Card" Padding="16,14">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border Width="36" Height="36" CornerRadius="8" Background="{DynamicResource ModeActionsSubtleBrush}" Margin="0,0,12,0">
+                                    <TextBlock Text="{c:Icon E945}" Classes="Icon" Foreground="{DynamicResource ModeActionsBrush}" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Actions" FontWeight="SemiBold" />
+                                    <TextBlock Text="Path, terminal, hash" Classes="Caption" FontSize="11.5" Margin="0,1,0,0" />
+                                </StackPanel>
+                                <ComboBox x:Name="ActionsKeyCombo" Grid.Column="2" Width="96" VerticalAlignment="Center" SelectionChanged="OnKeyMappingChanged" ToolTip.Tip="Key that opens the Actions wheel">
+                                    <ComboBoxItem Content="Alt" Tag="Alt" />
+                                    <ComboBoxItem Content="Control" Tag="Control" />
+                                    <ComboBoxItem Content="Shift" Tag="Shift" />
+                                    <ComboBoxItem Content="Super" Tag="Win" />
+                                    <ComboBoxItem Content="Space" Tag="Space" />
+                                </ComboBox>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Studio + activity -->
+                    <Grid Grid.Row="3" ColumnDefinitions="1.25*,16,*">
+
+                        <!-- Try it -->
+                        <Border x:Name="PlaygroundCard" Grid.Column="0" Classes="Card" DragDrop.AllowDrop="True">
+                            <Grid Margin="20,18,20,20" RowDefinitions="Auto,*">
+                                <StackPanel Grid.Row="0" Margin="0,0,0,14">
+                                    <TextBlock Text="Try it here" Classes="H2" />
+                                    <TextBlock Text="Drop a file to preview its wheel and run a conversion." Classes="Caption" Margin="0,3,0,0" />
+                                </StackPanel>
+
+                                <!-- Empty: dashed drop zone -->
+                                <Panel x:Name="PlaygroundPrompt" Grid.Row="1">
+                                    <Rectangle RadiusX="8" RadiusY="8" Stroke="{DynamicResource BorderStrongBrush}" StrokeThickness="1.2"
+                                               StrokeDashArray="5,4" Fill="{DynamicResource DropZoneBrush}" />
+                                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="16">
+                                        <Border Width="52" Height="52" CornerRadius="26" Background="{DynamicResource SurfaceRaisedBrush}" HorizontalAlignment="Center">
+                                            <TextBlock Text="{c:Icon E898}" Classes="Icon" FontSize="22" Foreground="{DynamicResource AccentBrush}" />
+                                        </Border>
+                                        <TextBlock Text="Drop a file here" FontWeight="SemiBold" FontSize="14" HorizontalAlignment="Center" Margin="0,14,0,4" />
+                                        <TextBlock Text="Images, video, audio, PDF and archives" Classes="Caption" HorizontalAlignment="Center" />
+                                        <Button Theme="{StaticResource AccentButton}" Click="OnChooseFileClick" HorizontalAlignment="Center" Margin="0,16,0,0" Padding="16,7">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{c:Icon E8E5}" FontFamily="{x:Static ic:Icons.Font}" FontSize="13" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                                <TextBlock Text="Browse files" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </Panel>
+
+                                <!-- Loaded: the wheel for the chosen file -->
+                                <Grid x:Name="PlaygroundWheelContainer" Grid.Row="1" IsVisible="False" RowDefinitions="*,Auto">
+                                    <!-- TODO(merge): the wheel agent's preview canvas goes in here (interactive wheel for the chosen file).
+                                         Until then the host shows the options as a list, and "Open the wheel" shows the real overlay. -->
+                                    <ContentControl x:Name="PlaygroundHost" Grid.Row="0">
+                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                                            <WrapPanel x:Name="PlaygroundOptions" />
+                                        </ScrollViewer>
+                                    </ContentControl>
+                                    <Grid Grid.Row="1" Margin="0,10,0,0" ColumnDefinitions="*,Auto,Auto">
+                                        <TextBlock x:Name="PlaygroundInstructions" Classes="Caption" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" Margin="0,0,12,0" />
+                                        <Button Grid.Column="1" Content="Open the wheel" Click="OnShowPlaygroundWheelClick" Padding="12,5" Margin="0,0,8,0"
+                                                ToolTip.Tip="Shows the wheel for this file, as it appears when you drag and tap" />
+                                        <Button Grid.Column="2" Content="Close" Click="OnCancelPlaygroundWheel" Padding="12,5" />
+                                    </Grid>
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Recent activity -->
+                        <Border Grid.Column="2" Classes="Card" MinWidth="300">
+                            <Grid Margin="0,18,0,8" RowDefinitions="Auto,*">
+                                <Grid Grid.Row="0" Margin="20,0,14,10">
+                                    <TextBlock Text="Recent activity" Classes="H2" VerticalAlignment="Center" />
+                                    <Button Theme="{StaticResource GhostButton}" Content="Clear" Click="OnClearHistoryClick" HorizontalAlignment="Right" FontSize="12" />
+                                </Grid>
+
+                                <ListBox x:Name="HistoryList" Grid.Row="1" Background="Transparent" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="0" Padding="8,0"
+                                         ItemContainerTheme="{StaticResource PlainListItem}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate x:DataType="m:ConversionJob">
+                                            <Border Classes="historyRow" Classes.running="{Binding IsRunning}" Classes.failed="{Binding !IsSuccess}"
+                                                    CornerRadius="8" Padding="12,10" Margin="0,0,0,2">
+                                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                                    <Border Classes="statusBg" Width="30" Height="30" CornerRadius="15" VerticalAlignment="Top" Margin="0,1,12,0">
+                                                        <TextBlock Classes="Icon statusIcon" FontSize="12" />
+                                                    </Border>
+
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding SourceFileName}" FontWeight="SemiBold" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+                                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                                            <Border Background="{DynamicResource SurfaceRaisedBrush}" CornerRadius="3" Padding="5,0" Margin="0,0,6,0">
+                                                                <TextBlock Text="{Binding TargetFormat}" FontSize="10.5" FontWeight="SemiBold" Foreground="{DynamicResource TextSecondaryBrush}" />
+                                                            </Border>
+                                                            <TextBlock Classes="detail" Text="{Binding DetailText}" ToolTip.Tip="{Binding ResultText}" FontSize="11.5"
+                                                                       Foreground="{DynamicResource TextTertiaryBrush}" TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <TextBlock Classes="error" Text="{Binding ErrorMessage}" FontSize="11.5" Foreground="{DynamicResource DangerBrush}"
+                                                                   TextWrapping="Wrap" Margin="0,3,0,0" MaxHeight="48" />
+                                                        <!-- Running: percentage bar, or a sweep while the work can't be measured -->
+                                                        <Grid Classes="progressPanel" Margin="0,6,0,0" ColumnDefinitions="*,44">
+                                                            <ProgressBar VerticalAlignment="Center" Value="{Binding Progress}" IsIndeterminate="{Binding !HasProgress}" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding ProgressText}" FontSize="11" Foreground="{DynamicResource TextTertiaryBrush}"
+                                                                       HorizontalAlignment="Right" VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </StackPanel>
+
+                                                    <StackPanel Classes="rowActions" Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                        <Button Theme="{StaticResource IconButton}" Content="{c:Icon E8A7}" Tag="{Binding TargetPath}" Click="OnOpenHistoryFileClick" ToolTip.Tip="Open" Width="28" Height="28" FontSize="12" />
+                                                        <Button Theme="{StaticResource IconButton}" Content="{c:Icon E838}" Tag="{Binding TargetPath}" Click="OnOpenHistoryFolderClick" ToolTip.Tip="Show in folder" Width="28" Height="28" FontSize="12" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <StackPanel x:Name="EmptyHistoryNotice" Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="24">
+                                    <TextBlock Text="{c:Icon E81C}" Classes="Icon" FontSize="26" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                    <TextBlock Text="No activity yet" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,12,0,4" />
+                                    <TextBlock x:Name="EmptyHistoryText" Classes="Caption" TextAlignment="Center" HorizontalAlignment="Center">
+                                        <Run Text="Drag a file and press " /><Run x:Name="EmptyHistoryKeyRun" Text="Shift" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" /><Run Text=" to get started." />
+                                    </TextBlock>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <!-- ======================= SETTINGS ======================= -->
+                <ScrollViewer x:Name="ViewSettings" IsVisible="False" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel MaxWidth="860" Margin="28,24,28,32">
+                        <TextBlock Text="Settings" Classes="H1" />
+                        <TextBlock Text="Changes are saved automatically." Classes="Caption" Margin="0,4,0,24" />
+
+                        <!-- Appearance: wheel templates -->
+                        <Grid Margin="2,0,0,8">
+                            <TextBlock Text="Wheel templates" Classes="SectionLabel" Margin="0" VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Theme="{StaticResource GhostButton}" Click="OnOpenTemplatesFolderClick" FontSize="12" ToolTip.Tip="Open the folder community templates are installed in">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{c:Icon E838}" FontFamily="{x:Static ic:Icons.Font}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        <TextBlock Text="Folder" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Theme="{StaticResource GhostButton}" Click="OnReloadTemplatesClick" FontSize="12" ToolTip.Tip="Rescan the templates folder">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{c:Icon E72C}" FontFamily="{x:Static ic:Icons.Font}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        <TextBlock Text="Reload" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Theme="{StaticResource GhostButton}" Click="OnExportTemplateClick" FontSize="12" ToolTip.Tip="Save the selected template as a template.json, a starting point for your own">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{c:Icon EDE1}" FontFamily="{x:Static ic:Icons.Font}" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                        <TextBlock Text="Export" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Click="OnAddTemplateClick" Margin="8,0,0,0" ToolTip.Tip="Locate a template.json, a .zip / .ogtemplate package, or a plugin .dll">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{c:Icon E710}" FontFamily="{x:Static ic:Icons.Font}" FontSize="12" VerticalAlignment="Center" Margin="0,0,7,0" />
+                                        <TextBlock Text="Add template…" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                        <Border x:Name="TemplateGalleryCard" Classes="Card" Margin="0,0,0,24" Padding="12,12,4,8" DragDrop.AllowDrop="True">
+                            <StackPanel>
+                                <TextBlock Classes="Caption" Margin="4,0,12,12"
+                                           Text="How the wheel looks, moves and sounds. The whole app takes on the template's colors. Drop a template.json, folder, .zip or plugin .dll here to add one." />
+                                <WrapPanel x:Name="TemplateGallery" />
+                                <TextBlock x:Name="TemplateErrorsText" Foreground="{DynamicResource WarningBrush}" FontSize="11.5" TextWrapping="Wrap"
+                                           IsVisible="False" Margin="4,4,12,4" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Output -->
+                        <TextBlock Text="Output" Classes="SectionLabel" />
+                        <Border Classes="Card" Margin="0,0,0,24">
+                            <StackPanel>
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*">
+                                    <TextBlock Text="{c:Icon E8B7}" Classes="Icon" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Save location" FontWeight="SemiBold" />
+                                        <TextBlock Text="Where converted files are written" Classes="Caption" Margin="0,2,0,12" />
+                                        <RadioButton x:Name="SaveSameDirRadio" GroupName="SaveLocation" Content="Next to the original file" IsChecked="True" Margin="0,0,0,10" IsCheckedChanged="OnSettingChanged" />
+                                        <RadioButton x:Name="SaveCustomDirRadio" GroupName="SaveLocation" Content="A folder I choose" IsCheckedChanged="OnSettingChanged" />
+                                        <Grid x:Name="CustomDirPanel" IsVisible="False" Margin="28,10,0,0" ColumnDefinitions="*,Auto">
+                                            <TextBox x:Name="CustomDirBox" IsReadOnly="True" FontSize="12" />
+                                            <Button Grid.Column="1" Content="Browse…" Click="OnBrowseOutputDirClick" Margin="8,0,0,0" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Grid>
+                                <Border Classes="RowDivider" />
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E8C8}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Replace existing files" FontWeight="SemiBold" />
+                                        <TextBlock Text="When off, a number is added instead (photo_1.png)" Classes="Caption" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="OverwriteCheck" Grid.Column="2" Theme="{StaticResource ToggleSwitch}" VerticalAlignment="Center" IsCheckedChanged="OnSettingChanged" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Wheel -->
+                        <TextBlock Text="Wheel" Classes="SectionLabel" />
+                        <Border Classes="Card" Margin="0,0,0,24">
+                            <StackPanel>
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E740}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Size" FontWeight="SemiBold" />
+                                        <TextBlock Text="How large the wheel appears on screen" Classes="Caption" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <TextBlock x:Name="WheelScaleText" Text="45%" Classes="Caption" Width="110" TextAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0" />
+                                        <Slider x:Name="WheelScaleSlider" Width="200" Minimum="0.40" Maximum="1.35" Value="0.45" SmallChange="0.05" LargeChange="0.1"
+                                                VerticalAlignment="Center" ValueChanged="OnWheelScaleSliderChanged" />
+                                    </StackPanel>
+                                </Grid>
+                                <Border Classes="RowDivider" />
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E765}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Close when the shortcut key is released" FontWeight="SemiBold" />
+                                        <TextBlock Text="On: hold the key while you choose; letting go cancels. Off: the wheel stays open until you drop the file or press Esc." Classes="Caption" Margin="0,2,24,0" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="CloseOnReleaseCheck" Grid.Column="2" Theme="{StaticResource ToggleSwitch}" VerticalAlignment="Center" IsCheckedChanged="OnSettingChanged" />
+                                </Grid>
+                                <Border Classes="RowDivider" />
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto,Auto">
+                                    <TextBlock Text="{c:Icon E767}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Sound feedback" FontWeight="SemiBold" />
+                                        <TextBlock Text="A soft tick when moving between options and switching wheels" Classes="Caption" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Theme="{StaticResource GhostButton}" Content="Play sample" Click="OnTestSoundClick" Margin="0,0,12,0" VerticalAlignment="Center" />
+                                    <CheckBox x:Name="SoundFeedbackCheck" Grid.Column="3" Theme="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center" IsCheckedChanged="OnSettingChanged" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Notifications -->
+                        <TextBlock Text="Notifications" Classes="SectionLabel" />
+                        <Border Classes="Card" Margin="0,0,0,24">
+                            <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                <TextBlock Text="{c:Icon EA8F}" Classes="Icon" HorizontalAlignment="Left" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="Show a notification when done" FontWeight="SemiBold" />
+                                    <TextBlock Text="A desktop notification with progress, the result size, and Open and Show in folder buttons" Classes="Caption" Margin="0,2,24,0" />
+                                </StackPanel>
+                                <CheckBox x:Name="ShowToastCheck" Grid.Column="2" Theme="{StaticResource ToggleSwitch}" IsChecked="True" VerticalAlignment="Center" IsCheckedChanged="OnSettingChanged" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Desktop integration (Linux): drag-and-tap helper and file manager menus -->
+                        <TextBlock Text="Desktop integration" Classes="SectionLabel" />
+                        <Border Classes="Card" Margin="0,0,0,24">
+                            <StackPanel x:Name="IntegrationPanel">
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E7C9}" Classes="Icon" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Drag-and-tap helper (GNOME Shell extension)" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="GnomeHelperText" Classes="Caption" Margin="0,2,24,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="GnomeHelperButton" Theme="{StaticResource AccentButton}" Content="Install" Click="OnInstallGnomeHelperClick" Margin="0,0,10,0" IsVisible="False" />
+                                        <Border x:Name="GnomeHelperBadge" Classes="Badge neutral">
+                                            <TextBlock x:Name="GnomeHelperStatusText" Text="Checking…" />
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                                <!-- One row per file manager, built in code -->
+                            </StackPanel>
+                        </Border>
+
+                        <!-- System -->
+                        <TextBlock Text="System" Classes="SectionLabel" />
+                        <Border Classes="Card" Margin="0,0,0,24">
+                            <StackPanel>
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E896}" Classes="Icon" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock x:Name="InstallTitleText" Text="Install OG Converter" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="InstallStatusText" Classes="Caption" Margin="0,2,24,0" />
+                                        <CheckBox x:Name="InstallDesktopShortcutCheck" Content="Also add a desktop shortcut" Margin="0,10,0,0" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Button x:Name="UninstallButton" Theme="{StaticResource GhostButton}" Content="Uninstall" Click="OnUninstallClick" Margin="0,0,8,0" />
+                                        <Button x:Name="InstallButton" Theme="{StaticResource AccentButton}" Content="Install" Click="OnInstallClick" Padding="16,7" />
+                                    </StackPanel>
+                                </Grid>
+                                <Border Classes="RowDivider" />
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E895}" Classes="Icon" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,2,0,0" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock x:Name="UpdateTitleText" Text="Updates" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="UpdateStatusText" Classes="Caption" Margin="0,2,24,0" TextWrapping="Wrap" />
+                                        <ProgressBar x:Name="UpdateProgress" IsVisible="False" Height="4" MinHeight="4" Margin="0,10,24,0" Minimum="0" Maximum="1"
+                                                     Background="{DynamicResource SurfaceRaisedBrush}" />
+                                        <Border x:Name="UpdateNotesPanel" IsVisible="False" Margin="0,12,24,0" Padding="14,12"
+                                                Background="{DynamicResource AccentFaintBrush}" CornerRadius="{DynamicResource ControlRadius}">
+                                            <StackPanel>
+                                                <TextBlock x:Name="UpdateNotesTitle" Classes="Overline" Margin="0,0,0,8" />
+                                                <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                                    <TextBlock x:Name="UpdateNotesText" Classes="Caption" FontSize="13" LineHeight="20" TextWrapping="Wrap" />
+                                                </ScrollViewer>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                        <Button x:Name="UpdateReleasePageButton" Theme="{StaticResource GhostButton}" Content="Release page" Click="OnUpdateReleasePageClick"
+                                                Margin="0,0,8,0" IsVisible="False" />
+                                        <Button x:Name="UpdateButton" Theme="{StaticResource AccentButton}" Content="Check for updates" Click="OnUpdateClick" Padding="16,7" />
+                                    </StackPanel>
+                                </Grid>
+                                <Border Classes="RowDivider" />
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E7E8}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Start when you log in" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="StartupDescText" Text="Opens quietly in the system tray when you log in, so the wheel is always ready" Classes="Caption" Margin="0,2,24,0" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="StartAtLoginCheck" Grid.Column="2" Theme="{StaticResource ToggleSwitch}" VerticalAlignment="Center"
+                                              IsCheckedChanged="OnStartAtLoginChanged" />
+                                </Grid>
+                                <Border Classes="RowDivider" />
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E8A0}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Start hidden in the tray" FontWeight="SemiBold" />
+                                        <TextBlock Text="Opening OG Converter from the app menu goes straight to the tray icon. Closing the window always keeps it running there." Classes="Caption" Margin="0,2,24,0" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="StartHiddenCheck" Grid.Column="2" Theme="{StaticResource ToggleSwitch}" VerticalAlignment="Center"
+                                              IsCheckedChanged="OnStartHiddenChanged" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Advanced -->
+                        <TextBlock Text="Advanced" Classes="SectionLabel" />
+                        <Border Classes="Card" Margin="0,0,0,24">
+                            <StackPanel>
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E92E}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Shortcut hints under the wheel" FontWeight="SemiBold" />
+                                        <TextBlock Text="The Shift · Ctrl · Alt · Esc bar. Turn it off once you know the keys for a cleaner, smaller wheel." Classes="Caption" Margin="0,2,24,0" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="ShowKeyHintsCheck" Grid.Column="2" Theme="{StaticResource ToggleSwitch}" VerticalAlignment="Center" IsCheckedChanged="OnSettingChanged" />
+                                </Grid>
+                                <Border Classes="RowDivider" />
+                                <Grid Classes="SettingRow" ColumnDefinitions="32,*,Auto">
+                                    <TextBlock Text="{c:Icon E916}" Classes="Icon" HorizontalAlignment="Left" />
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Reduce motion" FontWeight="SemiBold" />
+                                        <TextBlock Text="Show the wheel instantly, without open, switch and hover animations" Classes="Caption" Margin="0,2,24,0" />
+                                    </StackPanel>
+                                    <CheckBox x:Name="ReduceMotionCheck" Grid.Column="2" Theme="{StaticResource ToggleSwitch}" VerticalAlignment="Center" IsCheckedChanged="OnSettingChanged" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Engine: one row per helper program, built in code (MainWindow.Dependencies.cs) -->
+                        <TextBlock Text="Engine" Classes="SectionLabel" />
+                        <TextBlock x:Name="EngineHintText" Classes="Caption" Margin="2,-2,0,10" IsVisible="False" />
+                        <Border Classes="Card">
+                            <StackPanel x:Name="EnginePanel" />
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ======================= ABOUT ======================= -->
+                <ScrollViewer x:Name="ViewAbout" IsVisible="False" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel MaxWidth="860" Margin="28,24,28,32">
+
+                        <!-- Identity -->
+                        <Grid Margin="0,0,0,24" ColumnDefinitions="Auto,*,Auto">
+                            <Border Width="56" Height="56" CornerRadius="14" Margin="0,0,18,0" Background="{DynamicResource BrandBrush}">
+                                <TextBlock Text="OG" Foreground="{DynamicResource OnAccentBrush}" FontWeight="Bold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="OG Converter" Classes="H1" />
+                                <!-- Filled from the assembly version, which the release workflow stamps from the tag -->
+                                <TextBlock x:Name="AboutVersionText" Classes="Caption" Margin="0,4,0,0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                <Button Theme="{StaticResource GhostButton}" Click="OnOpenReleaseNotesClick" Margin="0,0,8,0" ToolTip.Tip="What changed in this version">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{c:Icon E8A5}" Classes="Icon" FontSize="14" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="Release notes" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Theme="{StaticResource AccentButton}" Click="OnOpenRepoClick" Padding="16,7" ToolTip.Tip="https://github.com/Dr-At0mic/og-converter">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{c:Icon E943}" Classes="Icon" FontSize="14" Foreground="{DynamicResource OnAccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="Source code" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Story -->
+                        <Border Classes="Card" Padding="24,22" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="WHY IT EXISTS" Classes="Overline" Margin="0,0,0,12" />
+                                <Border BorderBrush="{DynamicResource AccentBrush}" BorderThickness="3,0,0,0" Padding="16,2,0,2" Margin="0,0,0,16">
+                                    <TextBlock Classes="Body" FontSize="16" LineHeight="24"
+                                               Text="“Powered by pure boredom, caffeine, and living in a world with no superpowers, no magic, and no zombie apocalypse to save us from desk jobs.”" />
+                                </Border>
+                                <TextBlock Classes="Caption" FontSize="13" LineHeight="21" Margin="0,0,0,10"
+                                           Text="Online converters upload your confidential files to someone else's server, make you solve CAPTCHAs, park you in a fake 30-second queue and show you ads, all to turn a WebP into a PNG." />
+                                <TextBlock Classes="Caption" FontSize="13" LineHeight="21"
+                                           Text="OG Converter is built for developers, designers and power users who value flow. Drag a file, tap a key, let go. Everything runs on your machine: no cloud, no telemetry, no account." />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Facts -->
+                        <Grid Margin="0,0,0,16" ColumnDefinitions="*,16,*">
+                            <Border Grid.Column="0" Classes="Card" Padding="22,20">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                        <TextBlock Text="{c:Icon E950}" Classes="Icon" Foreground="{DynamicResource ModeToolsBrush}" Margin="0,0,10,0" />
+                                        <TextBlock Text="Under the hood" Classes="H2" />
+                                    </StackPanel>
+                                    <TextBlock Classes="Caption" Margin="0,0,0,8" Text="Native Linux app on .NET 10 and Avalonia" />
+                                    <TextBlock Classes="Caption" Margin="0,0,0,8" Text="A small GNOME Shell extension notices the drag-and-tap gesture" />
+                                    <TextBlock Classes="Caption" Margin="0,0,0,8" Text="Talks to the desktop over D-Bus: notifications, the tray, the file manager" />
+                                    <TextBlock Classes="Caption" Margin="0,0,0,8" Text="Uses FFmpeg, LibreOffice and Chromium if they're installed. It never installs anything on its own." />
+                                    <TextBlock Classes="Caption" Text="Also available for Windows." />
+                                </StackPanel>
+                            </Border>
+
+                            <Border Grid.Column="2" Classes="Card" Padding="22,20">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                        <TextBlock Text="{c:Icon EA18}" Classes="Icon" Foreground="{DynamicResource SuccessBrush}" Margin="0,0,10,0" />
+                                        <TextBlock Text="Privacy" Classes="H2" />
+                                    </StackPanel>
+                                    <TextBlock Classes="Caption" Margin="0,0,0,8" Text="Works fully offline. Files never leave your computer." />
+                                    <TextBlock Classes="Caption" Margin="0,0,0,8" Text="No analytics, telemetry or tracking of any kind" />
+                                    <TextBlock Classes="Caption" Margin="0,0,0,8" Text="No account, no sign-in, no license server" />
+                                    <TextBlock Classes="Caption" Text="Small footprint while waiting in the system tray" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <!-- Developers -->
+                        <Border Classes="Card" Padding="24,22" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="DEVELOPERS" Classes="Overline" Margin="0,0,0,14" />
+                                <UniformGrid Columns="3">
+                                    <UniformGrid.Styles>
+                                        <Style Selector="Border.DevAvatar">
+                                            <Setter Property="Width" Value="40" />
+                                            <Setter Property="Height" Value="40" />
+                                            <Setter Property="CornerRadius" Value="20" />
+                                            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+                                            <Setter Property="Margin" Value="0,0,12,0" />
+                                        </Style>
+                                        <Style Selector="Border.DevAvatar > TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                            <Setter Property="FontSize" Value="14" />
+                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                        </Style>
+                                    </UniformGrid.Styles>
+
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,12,0">
+                                        <Border Classes="DevAvatar">
+                                            <TextBlock Text="AS" />
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Anandhu Suresh" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                                <Button Theme="{StaticResource LinkButton}" Content="Portfolio ↗" FontSize="12" Tag="https://dr-at0mic.github.io/" Click="OnLinkClick" ToolTip.Tip="https://dr-at0mic.github.io/" />
+                                                <TextBlock Text="  ·  " FontSize="12" Foreground="{DynamicResource TextTertiaryBrush}" />
+                                                <Button Theme="{StaticResource LinkButton}" Content="GitHub ↗" FontSize="12" Tag="https://github.com/Dr-At0mic" Click="OnLinkClick" ToolTip.Tip="https://github.com/Dr-At0mic" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Classes="DevAvatar">
+                                            <TextBlock Text="MP" />
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Mahesh P S" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            <Button Theme="{StaticResource LinkButton}" Content="GitHub ↗" FontSize="12" Margin="0,2,0,0" HorizontalAlignment="Left"
+                                                    Tag="https://github.com/Yet-Zio" Click="OnLinkClick" ToolTip.Tip="https://github.com/Yet-Zio" />
+                                        </StackPanel>
+                                    </StackPanel>
+
+                                    <StackPanel Orientation="Horizontal">
+                                        <Border Classes="DevAvatar">
+                                            <TextBlock Text="BP" />
+                                        </Border>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Bijo Prasad" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                            <Button Theme="{StaticResource LinkButton}" Content="GitHub ↗" FontSize="12" Margin="0,2,0,0" HorizontalAlignment="Left"
+                                                    Tag="https://github.com/hikigaya007" Click="OnLinkClick" ToolTip.Tip="https://github.com/hikigaya007" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </UniformGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock Classes="Caption" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12" TextAlignment="Center" Margin="0,8,0,0"
+                                   Text="Inspired by the wonderful Tangerine for Mac (tangerineformac.com). Rebuilt natively for Windows and Linux." />
+                    </StackPanel>
+                </ScrollViewer>
+            </Panel>
+        </Grid>
+        <!-- Template switch: a snapshot of the old look fades out over the new one -->
+        <Image x:Name="ThemeFadeImage" IsHitTestVisible="False" IsVisible="False" Stretch="Fill" />
+    </Panel>
+</Window>
