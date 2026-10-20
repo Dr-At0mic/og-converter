@@ -306,7 +306,9 @@ namespace OgConverter.Platform.Windows
             ImageFileFormat.Png => encoding.NoInterlace ? new PngBitmapEncoder { Interlace = PngInterlaceOption.Off } : new PngBitmapEncoder(),
             ImageFileFormat.Jpeg => new JpegBitmapEncoder { QualityLevel = Math.Clamp(encoding.Quality, 1, 100) },
             ImageFileFormat.Bmp => new BmpBitmapEncoder(),
-            ImageFileFormat.Tiff => encoding.Deflate ? new TiffBitmapEncoder { Compression = TiffCompressOption.Zip } : new TiffBitmapEncoder(),
+            ImageFileFormat.Tiff => encoding.Deflate ? new TiffBitmapEncoder { Compression = TiffCompressOption.Zip }
+                : encoding.Uncompressed ? new TiffBitmapEncoder { Compression = TiffCompressOption.None }
+                : new TiffBitmapEncoder(),
             ImageFileFormat.Gif => new GifBitmapEncoder(),
             _ => throw new ArgumentOutOfRangeException(nameof(encoding))
         };

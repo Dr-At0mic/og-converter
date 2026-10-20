@@ -21,7 +21,9 @@ namespace OgConverter.Services
     /// </summary>
     public static class CompressionService
     {
-        public const string RequiresFFmpeg = "FFmpeg is required for this. Install it (winget install Gyan.FFmpeg) or put ffmpeg.exe next to OG Converter, then restart OG Converter.";
+        public static string RequiresFFmpeg => OperatingSystem.IsWindows()
+            ? "FFmpeg is required for this. Install it (winget install Gyan.FFmpeg) or put ffmpeg.exe next to OG Converter, then restart OG Converter."
+            : $"FFmpeg is required for this. Install it ({InstallHints.Command("ffmpeg")}), then restart OG Converter.";
 
         /// <summary>The pipeline a file goes through, or null when compressing it makes no sense (already-compressed archives, icons).</summary>
         public static CompressionKind? KindOf(string path)
@@ -293,7 +295,7 @@ namespace OgConverter.Services
             {
                 // Decode here (EXIF rotation, resize, transparency flattened), then let Guetzli encode from a lossless PNG
                 var picture = await Task.Run(() => ImageCodec.TryLoad(src, applyOrientation: true, o.MaxDimension))
-                              ?? throw new InvalidOperationException("Windows can't open this picture.");
+                              ?? throw new InvalidOperationException(ImageCodec.CantOpenPicture);
                 string png = NewTempPath("png");
                 try
                 {
@@ -466,7 +468,9 @@ namespace OgConverter.Services
         {
             if (encoders.Count > 0 && !encoders.Contains(name))
             {
-                throw new InvalidOperationException($"Your FFmpeg build has no {what} encoder ({name}). Install the full build: winget install Gyan.FFmpeg");
+                throw new InvalidOperationException($"Your FFmpeg build has no {what} encoder ({name}). " + (OperatingSystem.IsWindows()
+                    ? "Install the full build: winget install Gyan.FFmpeg"
+                    : "Install your distribution's full FFmpeg package (on Fedora: ffmpeg from RPM Fusion instead of ffmpeg-free)."));
             }
         }
 
@@ -871,7 +875,9 @@ namespace OgConverter.Services
                 catch (InvalidDataException ex)
                 {
                     TryDelete(target);
-                    throw new InvalidOperationException("This ZIP is encrypted or uses a compression method Windows can't read, so it can't be re-packed.", ex);
+                    throw new InvalidOperationException(OperatingSystem.IsWindows()
+                        ? "This ZIP is encrypted or uses a compression method Windows can't read, so it can't be re-packed."
+                        : "This ZIP is encrypted or uses a compression method that can't be read, so it can't be re-packed.", ex);
                 }
                 return target;
             }

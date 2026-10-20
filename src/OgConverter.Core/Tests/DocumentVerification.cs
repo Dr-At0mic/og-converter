@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
 using OgConverter.Models;
 using OgConverter.Services;
@@ -10,7 +9,7 @@ namespace OgConverter.Tests
     /// <summary>Self-test for universal actions, PDF passwords and Office document conversion.</summary>
     internal static class DocumentVerification
     {
-        public static async Task RunAsync(ConversionEngine engine, AppSettings settings, string tempDir, string testPdf)
+        public static async Task RunAsync(ConversionEngine engine, AppSettings settings, string tempDir, string testPdf, PlatformSelfTests platform)
         {
             // Universal actions exist for any extension
             string odd = Path.Combine(tempDir, "data.xyz");
@@ -77,12 +76,12 @@ namespace OgConverter.Tests
             if (DocumentEngine.HasWord) await ConvertTo(engine, settings, testPdf, "docx");
 
             // Regression: background picture in the header + white text must survive Word → HTML, as one file
-            if (DocumentEngine.HasWord)
+            if (DocumentEngine.HasWord && platform.CreateHeaderBackgroundDocx != null)
             {
                 string bgImage = Path.Combine(tempDir, "page-bg.png");
                 VerificationRunner.CreateDummyImage(bgImage);
                 string watermarked = Path.Combine(tempDir, "neurons.docx");
-                CreateHeaderBackgroundDocx(watermarked, bgImage);
+                platform.CreateHeaderBackgroundDocx(watermarked, bgImage);
                 string html = await ConvertTo(engine, settings, watermarked, "html", mustContain: "background-image: url(\"data:image/");
                 string htmlText = await File.ReadAllTextAsync(html);
                 bool selfContained = !Directory.Exists(Path.Combine(tempDir, "neurons_files")) && !htmlText.Contains("_files/");
@@ -102,12 +101,12 @@ namespace OgConverter.Tests
             await ConvertTo(engine, settings, xlsx, "pdf");
 
             // PowerPoint: build a PPTX, then PPTX → ODP → PDF
-            if (DocumentEngine.HasPowerPoint)
+            if (platform.CreatePresentation != null && (DocumentEngine.HasPowerPoint || DocumentEngine.LibreOfficePath != null))
             {
                 string pptx = Path.Combine(tempDir, "deck.pptx");
                 string picture = Path.Combine(tempDir, "deck_picture.png");
                 VerificationRunner.CreateDummyImage(picture);
-                CreatePresentation(pptx, picture);
+                platform.CreatePresentation(pptx, picture);
                 string odp = await ConvertTo(engine, settings, pptx, "odp");
                 await ConvertTo(engine, settings, odp, "pdf");
                 string ppt = await ConvertTo(engine, settings, pptx, "ppt");
@@ -177,72 +176,6 @@ namespace OgConverter.Tests
             Console.WriteLine($"     {Path.GetExtension(src).TrimStart('.').ToUpperInvariant(),-5} {item.Title,-14} Success={job.IsSuccess} {(DateTime.Now - started).TotalSeconds,5:0.0}s  {Path.GetFileName(job.TargetPath)} {job.ErrorMessage}");
             if (!job.IsSuccess) throw new Exception($"{src} {toolId} failed: {job.ErrorMessage}");
             return job.TargetPath;
-        }
-
-        /// <summary>White text over a full-page picture placed behind the text in the header (like the user's document).</summary>
-        private static void CreateHeaderBackgroundDocx(string path, string imagePath)
-        {
-            Exception? error = null;
-            var thread = new Thread(() =>
-            {
-                dynamic? word = null;
-                try
-                {
-                    word = Activator.CreateInstance(Type.GetTypeFromProgID("Word.Application")!)!;
-                    word.Visible = false;
-                    word.DisplayAlerts = 0;
-                    dynamic doc = word.Documents.Add();
-                    doc.Content.Text = "Neurons\rIf you are reading this article, neurons in your brain are working.";
-                    doc.Content.Font.Color = 16777215; // white
-                    dynamic shape = doc.Sections(1).Headers(1).Shapes.AddPicture(imagePath, false, true, 0, 0, 595, 842);
-                    shape.WrapFormat.Type = 5;         // wdWrapBehind
-                    shape.RelativeHorizontalPosition = 1;
-                    shape.RelativeVerticalPosition = 1;
-                    doc.SaveAs2(path, 16);
-                    doc.Close(0);
-                }
-                catch (Exception ex) { error = ex; }
-                finally
-                {
-                    try { word?.Quit(0); } catch { }
-                }
-            });
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
-            thread.Join();
-            if (error != null) throw new Exception("Couldn't create the watermark test document: " + error.Message, error);
-        }
-
-        /// <summary>Creates a two-slide deck with PowerPoint so the presentation path can be tested.</summary>
-        private static void CreatePresentation(string path, string picture)
-        {
-            Exception? error = null;
-            var thread = new Thread(() =>
-            {
-                bool wasRunning = System.Diagnostics.Process.GetProcessesByName("POWERPNT").Length > 0;
-                dynamic? app = null;
-                try
-                {
-                    app = Activator.CreateInstance(Type.GetTypeFromProgID("PowerPoint.Application")!)!;
-                    dynamic pres = app.Presentations.Add(0); // msoFalse: no window
-                    dynamic slide = pres.Slides.Add(1, 1);   // ppLayoutTitle
-                    slide.Shapes[1].TextFrame.TextRange.Text = "OG Converter test deck";
-                    slide.NotesPage.Shapes.Placeholders[2].TextFrame.TextRange.Text = "Remember the demo";
-                    dynamic second = pres.Slides.Add(2, 2);  // ppLayoutText
-                    second.Shapes.AddPicture(picture, 0, -1, 100, 100);
-                    pres.SaveAs(path, 24);
-                    pres.Close();
-                }
-                catch (Exception ex) { error = ex; }
-                finally
-                {
-                    try { if (app is not null && !wasRunning) { dynamic a = app; if ((int)a.Presentations.Count == 0) a.Quit(); } } catch { }
-                }
-            });
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
-            thread.Join();
-            if (error != null) throw new Exception("Couldn't create a test presentation: " + error.Message, error);
         }
     }
 }

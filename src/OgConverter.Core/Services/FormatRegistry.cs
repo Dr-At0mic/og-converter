@@ -371,7 +371,7 @@ namespace OgConverter.Services
             var list = new List<WheelItem>
             {
                 new WheelItem { Id = "act_copy_path", Title = "Copy Path", Description = "Copy full file path to clipboard", IconGlyph = "\uE71B", Mode = WheelMode.Actions },
-                new WheelItem { Id = "act_reveal", Title = "Show in Explorer", Description = "Select the file in File Explorer", IconGlyph = "\uE838", Mode = WheelMode.Actions },
+                new WheelItem { Id = "act_reveal", Title = OperatingSystem.IsWindows() ? "Show in Explorer" : "Show in Folder", Description = OperatingSystem.IsWindows() ? "Select the file in File Explorer" : "Select the file in the file manager", IconGlyph = "\uE838", Mode = WheelMode.Actions },
                 new WheelItem { Id = "act_terminal", Title = "Terminal", Description = "Open a terminal in this folder", IconGlyph = "\uE756", Mode = WheelMode.Actions },
                 new WheelItem { Id = "act_sha256", Title = "SHA-256", Description = "Compute the SHA-256 checksum and copy it", IconGlyph = "\uE8D7", Mode = WheelMode.Actions },
                 new WheelItem { Id = "act_copy_file", Title = "Duplicate", Description = "Create an instant copy next to the original", IconGlyph = "\uE8C8", Mode = WheelMode.Actions },

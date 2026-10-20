@@ -25,7 +25,9 @@ namespace OgConverter.Services
     /// </summary>
     public static class DocumentEngine
     {
-        public const string LibreOfficeInstallHint = "Install Microsoft Office, or LibreOffice for free (winget install TheDocumentFoundation.LibreOffice).";
+        public static string LibreOfficeInstallHint => OperatingSystem.IsWindows()
+            ? "Install Microsoft Office, or LibreOffice for free (winget install TheDocumentFoundation.LibreOffice)."
+            : $"Install LibreOffice for free ({InstallHints.Command("libreoffice")}).";
 
         private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
 
@@ -108,20 +110,24 @@ namespace OgConverter.Services
                 // Relative pictures (README screenshots) only resolve from the README's own folder; anywhere else
                 // (the temp folder, another output folder) they need absolute addresses
                 string srcDir = Path.GetDirectoryName(Path.GetFullPath(src))!;
-                bool besideSource = string.Equals(Path.GetDirectoryName(Path.GetFullPath(dst)), srcDir, StringComparison.OrdinalIgnoreCase);
-                string html = MarkdownToHtml(markdown, Path.GetFileNameWithoutExtension(src), dstExt == "html" && besideSource ? null : srcDir);
+                bool besideSource = string.Equals(Path.GetDirectoryName(Path.GetFullPath(dst)), srcDir, Platform.PathComparison);
+                bool viaBrowser = dstExt == "pdf" && BrowserRenderService.IsAvailable;
+                using var resources = viaBrowser ? BrowserRenderService.MakeReadable(srcDir) : null;
+                string html = MarkdownToHtml(markdown, Path.GetFileNameWithoutExtension(src), dstExt == "html" && besideSource ? null : resources?.Path ?? srcDir);
                 if (dstExt == "html")
                 {
                     await File.WriteAllTextAsync(dst, html, new UTF8Encoding(false));
                     return;
                 }
+                // LibreOffice links the pictures of an imported web page; inside the page they travel with the document
+                if (!HasWord && dstExt is "docx" or "doc" or "odt" or "rtf") html = EmbedLocalPictures(html, srcDir);
 
-                string tempHtml = Path.Combine(Path.GetTempPath(), $"og-converter-md-{Guid.NewGuid():N}.html");
+                string tempHtml = Path.Combine(BrowserRenderService.WorkFolder, $"og-converter-md-{Guid.NewGuid():N}.html");
                 await File.WriteAllTextAsync(tempHtml, html, new UTF8Encoding(false));
                 try
                 {
                     // A browser lays out code, tables and images like GitHub does; Word's HTML import is rougher
-                    if (dstExt == "pdf" && BrowserRenderService.IsAvailable) await BrowserRenderService.PrintAsync(tempHtml, dst);
+                    if (viaBrowser) await BrowserRenderService.PrintAsync(tempHtml, dst);
                     else await ConvertAsync(tempHtml, dst, dstExt);
                 }
                 finally
@@ -195,8 +201,9 @@ namespace OgConverter.Services
                 return;
             }
 
-            string html = MarkdownToHtml(await File.ReadAllTextAsync(src), Path.GetFileNameWithoutExtension(src), Path.GetDirectoryName(Path.GetFullPath(src)));
-            string tempHtml = Path.Combine(Path.GetTempPath(), $"og-converter-md-{Guid.NewGuid():N}.html");
+            using var resources = BrowserRenderService.MakeReadable(Path.GetDirectoryName(Path.GetFullPath(src))!);
+            string html = MarkdownToHtml(await File.ReadAllTextAsync(src), Path.GetFileNameWithoutExtension(src), resources.Path);
+            string tempHtml = Path.Combine(BrowserRenderService.WorkFolder, $"og-converter-md-{Guid.NewGuid():N}.html");
             await File.WriteAllTextAsync(tempHtml, html, new UTF8Encoding(false));
             try
             {
@@ -252,7 +259,7 @@ namespace OgConverter.Services
         private static async Task RunOfficePasswordJobAsync(string src, string dst, string? openPassword, string newPassword, string modifyPassword)
         {
             string ext = Path.GetExtension(src).TrimStart('.').ToLowerInvariant();
-            if (!CanProtectOffice(ext)) throw new InvalidOperationException($"Password-protecting .{ext} files needs Microsoft Office.");
+            if (!CanProtectOffice(ext)) throw new InvalidOperationException(OperatingSystem.IsWindows() ? $"Password-protecting .{ext} files needs Microsoft Office." : $"Password-protecting .{ext} files isn't available on this system.");
 
             await Gate.WaitAsync();
             try
@@ -418,10 +425,16 @@ namespace OgConverter.Services
                     RedirectStandardOutput = true
                 };
                 foreach (string arg in new[] { $"-env:UserInstallation={profile}", "--headless", "--norestore", "--nolockcheck",
-                                               "--convert-to", filter, "--outdir", outDir, src })
+                                               "--convert-to", filter, "--outdir", outDir })
                 {
                     psi.ArgumentList.Add(arg);
                 }
+                // A web page opens in Writer/Web, which can only save HTML and text: open it in Writer itself instead
+                if (Path.GetExtension(src).ToLowerInvariant() is ".html" or ".htm" && dstExt is "docx" or "doc" or "odt" or "rtf" or "pdf")
+                {
+                    psi.ArgumentList.Add("--infilter=HTML (StarWriter)");
+                }
+                psi.ArgumentList.Add(src);
 
                 using var process = Process.Start(psi)!;
                 var output = process.StandardOutput.ReadToEndAsync();
@@ -449,6 +462,39 @@ namespace OgConverter.Services
                 try { Directory.Delete(outDir, true); } catch { }
             }
         }
+
+        private static readonly System.Text.RegularExpressions.Regex ImgSrc =
+            new(@"(<img\b[^>]*?\bsrc\s*=\s*"")(?<src>[^""]+)("")", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        /// <summary>Pictures on this PC (relative to <paramref name="baseDir"/>, or file: addresses) as data: addresses.</summary>
+        private static string EmbedLocalPictures(string html, string baseDir) => ImgSrc.Replace(html, m =>
+        {
+            string src = m.Groups["src"].Value;
+            if (src.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return m.Value;
+            try
+            {
+                string path = Uri.TryCreate(src, UriKind.Absolute, out var uri)
+                    ? uri.IsFile ? uri.LocalPath : ""
+                    : Path.GetFullPath(Path.Combine(baseDir, Uri.UnescapeDataString(src.Split('?', '#')[0])));
+                if (path.Length == 0 || !File.Exists(path) || new FileInfo(path).Length > 20 * 1024 * 1024) return m.Value;
+                string mime = Path.GetExtension(path).ToLowerInvariant() switch
+                {
+                    ".png" => "image/png",
+                    ".jpg" or ".jpeg" => "image/jpeg",
+                    ".gif" => "image/gif",
+                    ".bmp" => "image/bmp",
+                    ".webp" => "image/webp",
+                    ".svg" => "image/svg+xml",
+                    _ => ""
+                };
+                if (mime.Length == 0) return m.Value;
+                return m.Groups[1].Value + $"data:{mime};base64,{Convert.ToBase64String(File.ReadAllBytes(path))}" + m.Groups[3].Value;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                return m.Value;
+            }
+        });
 
         private static void TryDelete(string path)
         {

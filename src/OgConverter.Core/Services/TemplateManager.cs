@@ -320,7 +320,7 @@ namespace OgConverter.Services
                 Directory.Move(staging, target);
 
                 Reload();
-                var added = _templates.Where(t => string.Equals(t.Directory, target, StringComparison.OrdinalIgnoreCase)).ToList();
+                var added = _templates.Where(t => string.Equals(t.Directory, target, Platform.PathComparison)).ToList();
                 if (added.Count == 0)
                 {
                     string why = _loadErrors.FirstOrDefault(e => e.StartsWith(Path.GetFileName(target), StringComparison.OrdinalIgnoreCase)) ?? "it contains no usable template";
@@ -344,7 +344,7 @@ namespace OgConverter.Services
         {
             if (template.Source == TemplateSource.BuiltIn || string.IsNullOrEmpty(template.Directory)) return;
             string dir = Path.GetFullPath(template.Directory);
-            if (!dir.StartsWith(Path.GetFullPath(TemplatesDirectory), StringComparison.OrdinalIgnoreCase)) return;
+            if (!dir.StartsWith(Path.GetFullPath(TemplatesDirectory), Platform.PathComparison)) return;
 
             Renderers?.UnloadPlugins();
             if (Directory.Exists(dir)) Directory.Delete(dir, true);
@@ -364,7 +364,7 @@ namespace OgConverter.Services
             string root = Path.GetFullPath(template.Directory);
             string full = Path.GetFullPath(Path.Combine(root, relative));
             // No escaping the template folder with ..\ or absolute paths
-            if (!full.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
+            if (!full.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, Platform.PathComparison)) return null;
             return File.Exists(full) ? full : null;
         }
 
@@ -377,7 +377,7 @@ namespace OgConverter.Services
                 {
                     if (string.IsNullOrWhiteSpace(rel)) continue;
                     string src = Path.GetFullPath(Path.Combine(root, rel));
-                    if (!src.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || !File.Exists(src)) continue;
+                    if (!src.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, Platform.PathComparison) || !File.Exists(src)) continue;
                     string dst = Path.Combine(toDir, Path.GetRelativePath(root, src));
                     Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
                     File.Copy(src, dst, true);

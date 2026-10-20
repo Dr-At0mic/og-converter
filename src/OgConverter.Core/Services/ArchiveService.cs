@@ -216,7 +216,7 @@ namespace OgConverter.Services
                 {
                     if (string.IsNullOrEmpty(entry.Key)) continue;
                     string dest = Path.GetFullPath(Path.Combine(destDir, entry.Key));
-                    if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!dest.StartsWith(root, Platform.PathComparison)) continue;
 
                     if (entry.IsDirectory)
                     {
@@ -280,7 +280,9 @@ namespace OgConverter.Services
 
         private static async Task RunBsdTarAsync(params string[] args)
         {
-            string tar = BsdTar.Value ?? throw new InvalidOperationException("Opening this kind of archive needs Windows 10 (1803) or later, which includes tar.exe.");
+            string tar = BsdTar.Value ?? throw new InvalidOperationException(OperatingSystem.IsWindows()
+                ? "Opening this kind of archive needs Windows 10 (1803) or later, which includes tar.exe."
+                : $"Opening this kind of archive needs bsdtar ({InstallHints.Command("bsdtar")}).");
             var psi = new ProcessStartInfo(tar)
             {
                 UseShellExecute = false,
