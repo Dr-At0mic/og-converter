@@ -297,9 +297,23 @@ namespace OgConverter.Views
             Point center = stagePoint ?? ScreenCenter();
             Point topLeft = ClampToScreen(new Point(center.X - WheelCenterOffset.X, center.Y - WheelCenterOffset.Y));
             Position = ToPixels(topLeft);
+            ReassertWindowState();
             Show();
             if (_clickMode) Activate();
             _ = PlaceAndRevealAsync(topLeft, token);
+        }
+
+        /// <summary>
+        /// The window manager drops a window's "always on top" and "not in the taskbar" states when it's hidden, and Avalonia
+        /// doesn't send them again on the next show. Without them, GNOME's focus-stealing prevention stacks the wheel under
+        /// the window being dragged from and posts "“OG Converter Wheel” is ready" instead of showing it.
+        /// </summary>
+        private void ReassertWindowState()
+        {
+            Topmost = false;
+            Topmost = true;
+            ShowInTaskbar = true;
+            ShowInTaskbar = false;
         }
 
         /// <summary>
@@ -308,14 +322,15 @@ namespace OgConverter.Views
         /// </summary>
         private async Task PlaceAndRevealAsync(Point topLeft, int token)
         {
+            bool placed = false;
             if (DBusService.Primary is { } bus)
             {
                 // The window manager needs a moment to manage the newly mapped window before the extension can find it
-                for (int attempt = 0; attempt < 6; attempt++)
+                for (int attempt = 0; attempt < 6 && !placed; attempt++)
                 {
                     if (token != _showToken || !_open) return;
-                    if (await bus.MoveWindowByTitleAsync(Title ?? string.Empty, (int)Math.Round(topLeft.X), (int)Math.Round(topLeft.Y))) break;
-                    await Task.Delay(25);
+                    placed = await bus.MoveWindowByTitleAsync(Title ?? string.Empty, (int)Math.Round(topLeft.X), (int)Math.Round(topLeft.Y));
+                    if (!placed) await Task.Delay(25);
                 }
             }
             if (token != _showToken || !_open) return;
@@ -323,6 +338,10 @@ namespace OgConverter.Views
             _root.Opacity = 1;
             WheelCanvas.PlayIntro();
             SoundService.Instance.Play(UiSound.Open);
+
+            // The drag only tells this window about the file once the pointer moves over it, and it opened under a still
+            // pointer: without a nudge the wheel stays empty until the user moves the mouse
+            if (placed && !_clickMode && !_dragHasFile && DBusService.Primary is { } shell) await shell.NudgePointerAsync();
         }
 
         /// <summary>X11 pixels for a stage point. XWayland uses the stage's units unless it scales natively, where Avalonia's scaling matches.</summary>

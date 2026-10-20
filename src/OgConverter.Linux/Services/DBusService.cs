@@ -192,6 +192,30 @@ namespace OgConverter.Services
             }
         }
 
+        /// <summary>
+        /// Has the extension move the pointer one pixel and back, so a drag in progress enters the window now under it.
+        /// False when the extension isn't there or is older than version 2.
+        /// </summary>
+        public async Task<bool> NudgePointerAsync()
+        {
+            try
+            {
+                MessageBuffer message;
+                {
+                    var writer = _connection.GetMessageWriter();
+                    writer.WriteMethodCallHeader(destination: ShellBusName, path: ShellObjectPath, @interface: ShellInterface,
+                        member: "NudgePointer", signature: null, flags: MessageFlags.NoAutoStart);
+                    message = writer.CreateMessage();
+                }
+                await _connection.CallMethodAsync(message).WaitAsync(TimeSpan.FromSeconds(1));
+                return true;
+            }
+            catch (Exception ex) when (ex is DBusExceptionBase or TimeoutException or OperationCanceledException)
+            {
+                return false;
+            }
+        }
+
         /// <summary>The pointer in stage coordinates from the extension, or null without it.</summary>
         public async Task<(int X, int Y)?> GetPointerAsync()
         {

@@ -100,10 +100,11 @@ call it through `org.gnome.Shell`:
 
 | Member | |
 |---|---|
-| `MoveWindowByTitle(s title, i x, i y) -> (b found)` | Finds the first window whose title matches `title` exactly and calls `move_frame(true, x, y)` on it. Coordinates are stage (logical) coordinates. |
+| `MoveWindowByTitle(s title, i x, i y) -> (b found)` | Finds the first window whose title matches `title` exactly and calls `move_frame(true, x, y)` on it, then keeps it above other windows, raises it and clears a "demands attention" flag (since version 2). Coordinates are stage (logical) coordinates. |
 | `GetPointer() -> (i x, i y)` | Returns the current pointer position in stage coordinates. |
+| `NudgePointer()` | Moves the pointer one pixel right and, 30 ms later, back (virtual pointer device). A drag in progress then enters the window now under the pointer (the wheel that just opened there). Since version 2. |
 | `SetDebug(b enabled)` | Logs the state machine to the journal and enables a probe for stage key events. |
-| property `Version` (u) | Currently `1`. |
+| property `Version` (u) | Currently `2`. |
 | property `AppPresent` (b) | `true` while the app owns its bus name. |
 
 ## Design notes and findings

@@ -45,6 +45,7 @@ const SHELL_IFACE_XML = `
       <arg type="i" name="x" direction="out"/>
       <arg type="i" name="y" direction="out"/>
     </method>
+    <method name="NudgePointer"/>
     <method name="SetDebug">
       <arg type="b" name="enabled" direction="in"/>
     </method>
@@ -52,7 +53,11 @@ const SHELL_IFACE_XML = `
     <property name="AppPresent" type="b" access="read"/>
   </interface>
 </node>`;
-const SHELL_API_VERSION = 1;
+const SHELL_API_VERSION = 2;
+
+// NudgePointer: how long the pointer stays one pixel off before it goes back.
+// Long enough not to be merged with the move back into a single (null) motion.
+const NUDGE_BACK_MS = 30;
 
 // ---- Tuning ----------------------------------------------------------------
 const IDLE_POLL_MS = 100;  // only looks at BUTTON1_MASK
@@ -240,6 +245,8 @@ export default class OgConverterExtension extends Extension {
         this._debugEnabled = false;
         this._appPresent = false;
         this._stageEventId = 0;
+        this._nudgeId = 0;
+        this._virtualPointer = null;
 
         this._detector = new DragTapDetector({
             onKeyTapped: (key, x, y) => {
@@ -281,6 +288,11 @@ export default class OgConverterExtension extends Extension {
         this._detector?.stop();
         this._detector = null;
         this._setStageProbe(false);
+        if (this._nudgeId) {
+            GLib.Source.remove(this._nudgeId);
+            this._nudgeId = 0;
+        }
+        this._virtualPointer = null;
         if (this._dbusImpl) {
             this._dbusImpl.unexport();
             this._dbusImpl = null;
@@ -347,6 +359,13 @@ export default class OgConverterExtension extends Extension {
         }
         const win = actor.meta_window;
         win.move_frame(true, x, y);
+        // Focus-stealing prevention may have stacked the window under the one
+        // the drag started in and flagged it ("... is ready"): put it on top
+        if (!win.is_above())
+            win.make_above();
+        win.raise();
+        if (win.demands_attention)
+            win.unset_demands_attention();
         this._log(`MoveWindowByTitle("${title}", ${x}, ${y})`);
         return true;
     }
@@ -354,6 +373,25 @@ export default class OgConverterExtension extends Extension {
     GetPointer() {
         const [x, y] = global.get_pointer();
         return [x, y];
+    }
+
+    // A drag only enters the window under the pointer when the pointer moves.
+    // The wheel opens under a still pointer, so it can't see the dragged file
+    // until the user moves the mouse; one pixel out and back fixes that.
+    NudgePointer() {
+        if (!this._virtualPointer) {
+            const seat = Clutter.get_default_backend().get_default_seat();
+            this._virtualPointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
+        }
+        this._virtualPointer.notify_relative_motion(GLib.get_monotonic_time(), 1, 0);
+        if (this._nudgeId)
+            GLib.Source.remove(this._nudgeId);
+        this._nudgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, NUDGE_BACK_MS, () => {
+            this._nudgeId = 0;
+            this._virtualPointer?.notify_relative_motion(GLib.get_monotonic_time(), -1, 0);
+            return GLib.SOURCE_REMOVE;
+        });
+        this._log('NudgePointer');
     }
 
     SetDebug(enabled) {
