@@ -5,9 +5,7 @@ What changed in each release. The release workflow copies a version's section in
 
 Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fails if it's missing.
 
-## [Unreleased]
-
-Rename this section to the new version (for example `## [1.5.0]`) before tagging.
+## [1.5.0]
 
 - **Linux version (beta)**: OG Converter now runs on Linux, as `og-converter-vX.Y.Z-linux-x64.tar.gz` next to the Windows exe.
   The wheel, the dashboard, every dialog, notifications, the tray and templates work. On GNOME, a small helper extension
