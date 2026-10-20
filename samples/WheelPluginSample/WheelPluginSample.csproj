@@ -11,11 +11,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>WheelPluginSample</RootNamespace>
+    <!-- Only the two references below: nothing of the app may be copied next to the plugin -->
+    <DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Compile against the app's public API (OgConverter.Wheel); don't ship a copy of it with the plugin -->
-    <ProjectReference Include="..\..\og-converter.csproj" Private="false" ExcludeAssets="runtime" />
+    <!-- Compile against the app's public API (OgConverter.Wheel, and the models in OgConverter.Core); don't ship a copy of it with the plugin -->
+    <ProjectReference Include="..\..\src\OgConverter.Windows\OgConverter.Windows.csproj" Private="false" ExcludeAssets="runtime" />
+    <ProjectReference Include="..\..\src\OgConverter.Core\OgConverter.Core.csproj" Private="false" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

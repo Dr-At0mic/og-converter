@@ -311,7 +311,7 @@ Protect and Compress dialogs when a choice needs them.
 ### Run in Development
 ```powershell
 # From the repository root
-dotnet run --project og-converter.csproj
+dotnet run --project src\OgConverter.Windows
 ```
 
 ### Install, start with Windows, uninstall
@@ -322,7 +322,7 @@ settings and templates in `%AppData%\OGConverter` are kept.
 
 ### Run the Self-Test Suite
 ```powershell
-dotnet run --project og-converter.csproj -- --test
+dotnet run --project src\OgConverter.Windows -- --test
 ```
 Covers conversions, PDF tools, protection, and compression for every file type and mode: lossless results are checked pixel-for-pixel, target sizes are measured, and PDFs and Office files are validated after compression.
 It also crops every image format, animated GIFs and video, trims video (exact and fast), reads paths from every kind of drag source (Explorer, editor path text, `file://` links),
@@ -339,14 +339,14 @@ It also checks wheel templates: every built-in renders in every wheel at 40% and
 ```powershell
 dotnet build samples\WheelPluginSample -c Release
 $env:OGCONVERTER_PLUGIN_SAMPLE = "$PWD\samples\WheelPluginSample\bin\Release\net10.0-windows10.0.19041.0\WheelPluginSample.dll"
-dotnet run --project og-converter.csproj -- --test
+dotnet run --project src\OgConverter.Windows -- --test
 ```
 
 `--test markdown,everyday,archive,protection` runs only those sections: `markdown` (README outputs), `everyday` (web pages, SVG, HEIC, OCR,
 rotate/snapshot, archive extraction and the newer actions), `archive` (the Archive action and Guetzli) and `protection` (every Protect
 method, including password 7z/RAR, and Unlock).
 
-`dotnet run --project og-converter.csproj -- --snapshot <folder>` renders every screen, dialog and installed template to PNG for visual review.
+`dotnet run --project src\OgConverter.Windows -- --snapshot <folder>` renders every screen, dialog and installed template to PNG for visual review.
 
 ### Convert from the command line
 ```powershell
@@ -359,10 +359,11 @@ Uses your saved settings (output folder, overwrite). Exit code 0 on success, 1 o
 
 ### Publish a Release Build (single self-contained `.exe`)
 ```powershell
-dotnet publish og-converter.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+dotnet publish src\OgConverter.Windows\OgConverter.Windows.csproj -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 Output: `publish\og-converter.exe` (≈174 MB, no .NET install needed). It's the same command the release workflow runs; add `-p:Version=1.2.3` to stamp a version
-(shown in Settings › System and Windows Settings › Apps). Name the `.csproj` explicitly: the sample plugin under `samples/` is a second project.
+(shown in Settings › System and Windows Settings › Apps). Name the Windows `.csproj` explicitly: `og-converter.sln` also holds the portable
+`OgConverter.Core` library, and the sample plugin under `samples/` is a separate project.
 There's no separate installer: the exe installs itself from **Settings › System › Install**.
 
 To cut a release, add a `## [1.2.3]` section to [CHANGELOG.md](CHANGELOG.md) describing what changed, then push the tag `v1.2.3`.
@@ -378,63 +379,74 @@ Adding `-p:EnableCompressionInSingleFile=true` shrinks the exe to ≈74 MB, but 
 
 ```
 OGConverter/
-├── Controls/
-│   ├── RadialWheelCanvas.cs      # Hosts a wheel: options, hover/open/switch animation, hands frames to the renderer
-│   ├── CropCanvas.cs             # Crop preview: image, dimmed outside, handles, aspect lock
-│   └── RangeTimeline.cs          # Trim timeline with start/end handles
-├── Wheel/
-│   ├── WheelRenderApi.cs         # IWheelRenderer (the plugin adapter), WheelFrame, WheelPalette
-│   ├── WheelPainter.cs           # Shared geometry, text, hub helpers for renderers
-│   └── Renderers/                # Built-in renderers: Ring, Glass (macOS), Orbit (Dock), Neon
-├── Models/
-│   └── Models.cs                 # WheelItem, ConversionJob, AppSettings, Protection/Compression/Archive options
-├── Services/
-│   ├── GlobalHookService.cs      # Low-level keyboard & mouse hooks for the drag gesture
-│   ├── ShellSelectionService.cs  # Finds the file being dragged in Explorer
-│   ├── IdeSelectionService.cs    # Finds the file in a VS Code-based editor's file tree (UI Automation)
-│   ├── DroppedFiles.cs           # Reads paths from any drag source (file lists, file:// links, path text)
-│   ├── FormatRegistry.cs         # Which conversions, tools and actions each file type gets
-│   ├── ConversionEngine.cs       # Runs a wheel choice: FFmpeg, native encoders, documents, tools
-│   ├── CompressionService.cs     # Lossless/lossy compression for every file kind
-│   ├── ImageCodec.cs             # WIC decode/encode, EXIF orientation, lossless JPEG cleanup
-│   ├── PdfCompressor.cs          # PDF image downsampling & stream optimization
-│   ├── OfficeCompressor.cs       # DOCX/XLSX/PPTX/ODF picture compression & re-packing
-│   ├── MediaToolkit.cs           # FFmpeg runner with progress, media probe, GPU encoder detection
-│   ├── MediaEditService.cs       # Crop & Rotate (images, GIF, video), Trim, Snapshot, preview frames
-│   ├── DocumentEngine.cs         # Office (COM) / LibreOffice conversions, Markdown
-│   ├── BrowserRenderService.cs   # Headless Edge/Chrome: HTML/Markdown/SVG → PDF or full-page PNG
-│   ├── ArchiveService.cs         # Extract / re-pack every archive format (.NET, SharpCompress, Windows tar.exe)
-│   ├── ArchiveWriter.cs          # Archive action: ZIP, 7z, RAR, tar.*, gz/bz2/xz/zst/lz4/lz/br, cpio, ISO, ar; Guetzli staging
-│   ├── DependencyService.cs      # Optional helpers: FFmpeg, LibreOffice, 7-Zip, WinRAR (winget), Guetzli (download)
-│   ├── GuetzliService.cs         # Guetzli encoding, PC specs, memory/time planner for parallel jobs
-│   ├── UpdateService.cs          # Check for updates: latest GitHub release, checksum, restart
-│   ├── OcrService.cs             # Text in pictures and scanned PDFs (Windows.Media.Ocr)
-│   ├── WindowsShellService.cs    # Unblock downloads (Mark of the Web), desktop wallpaper
-│   ├── PdfToolsService.cs        # Split, merge, rotate, metadata, text, PDF passwords
-│   ├── PdfRenderService.cs       # Windows PDF renderer for page images
-│   ├── ProtectionService.cs      # Protect/Unlock routing; FileVault.cs (.ogx encryption)
-│   ├── SoundService.cs           # Synthesized sound packs per template (or a template's own .wav files)
-│   ├── TemplateManager.cs        # Built-in + community templates, import, plugin loading
-│   ├── AppThemeService.cs        # Applies a template's palette to the whole app
-│   ├── InstallService.cs         # Per-user install/uninstall, start with Windows
-│   ├── TrayIconService.cs        # System tray icon
-│   ├── SettingsService.cs        # JSON settings in %AppData%\OGConverter
-│   └── NotificationService.cs    # Result and progress toasts
-├── Views/
-│   ├── RadialWheelOverlay.xaml   # Transparent, topmost radial menu
-│   ├── CompressDialog.xaml       # Lossless/lossy compression options
-│   ├── ArchiveDialog.xaml        # Archive format, level, method, pictures, password
-│   ├── GuetzliResourcePanel.cs   # CPU / memory bar / time panel shared by Archive and Compress
-│   ├── ExtrasDialog.xaml         # "Recommended extras" prompt (FFmpeg, LibreOffice)
-│   ├── CropDialog / TrimDialog   # Crop on a preview; pick a video's start and end
-│   ├── ProtectDialog / UnlockDialog / PdfSplitDialog / PdfMergeDialog
-│   └── ToastNotificationWindow   # Completion & progress toasts
-├── MainWindow.xaml               # Home, Settings, About (+ MainWindow.Templates.cs, .System.cs, .Dependencies.cs, .Updates.cs)
+├── og-converter.sln
+├── src/
+│   ├── OgConverter.Core/             # Portable (plain .NET, no WPF or Windows APIs): everything that isn't UI
+│   │   ├── Models/
+│   │   │   └── Models.cs             # WheelItem, ConversionJob, AppSettings, Protection/Compression/Archive options
+│   │   ├── Platform/                 # What each app plugs in at startup (Platform.cs): images, desktop, OCR, PDF pages, Office…
+│   │   ├── Services/
+│   │   │   ├── FormatRegistry.cs         # Which conversions, tools and actions each file type gets
+│   │   │   ├── ConversionEngine.cs       # Runs a wheel choice: FFmpeg, native encoders, documents, tools
+│   │   │   ├── CompressionService.cs     # Lossless/lossy compression for every file kind
+│   │   │   ├── ImageCodec.cs             # Decode/encode through the image backend, EXIF orientation, lossless JPEG cleanup
+│   │   │   ├── PdfCompressor.cs          # PDF image downsampling & stream optimization
+│   │   │   ├── OfficeCompressor.cs       # DOCX/XLSX/PPTX/ODF picture compression & re-packing
+│   │   │   ├── MediaToolkit.cs           # FFmpeg runner with progress, media probe, GPU encoder detection
+│   │   │   ├── MediaEditService.cs       # Crop & Rotate (images, GIF, video), Trim, Snapshot, preview frames
+│   │   │   ├── DocumentEngine.cs         # Office (through Platform.Office) / LibreOffice conversions, Markdown
+│   │   │   ├── BrowserRenderService.cs   # Headless Edge/Chrome: HTML/Markdown/SVG → PDF or full-page PNG
+│   │   │   ├── ArchiveService.cs         # Extract / re-pack every archive format (.NET, SharpCompress, Windows tar.exe)
+│   │   │   ├── ArchiveWriter.cs          # Archive action: ZIP, 7z, RAR, tar.*, gz/bz2/xz/zst/lz4/lz/br, cpio, ISO, ar; Guetzli staging
+│   │   │   ├── DependencyService.cs      # Optional helpers: FFmpeg, LibreOffice, 7-Zip, WinRAR (winget), Guetzli (download)
+│   │   │   ├── GuetzliService.cs         # Guetzli encoding, PC specs, memory/time planner for parallel jobs
+│   │   │   ├── UpdateService.cs          # Check for updates: latest GitHub release, checksum, restart
+│   │   │   ├── OcrService.cs             # Text in pictures and scanned PDFs (engine: Platform.Ocr)
+│   │   │   ├── PdfToolsService.cs        # Split, merge, rotate, metadata, text, PDF passwords
+│   │   │   ├── PdfRenderService.cs       # PDF pages to images (renderer: Platform.Pdf)
+│   │   │   ├── ProtectionService.cs      # Protect/Unlock routing; FileVault.cs (.ogx encryption)
+│   │   │   ├── DroppedPaths.cs           # Paths from file:// links and path text dragged from editors
+│   │   │   ├── TemplateManager.cs        # Built-in + community templates, import (renderers: Platform.WheelRenderers)
+│   │   │   └── SettingsService.cs        # JSON settings in %AppData%\OGConverter
+│   │   ├── CommandLine.cs            # --convert
+│   │   └── Tests/                    # --test runner and its portable sections
+│   └── OgConverter.Windows/          # The WPF app (og-converter.exe)
+│       ├── Platform/Windows/         # Windows side of Platform: WIC imaging, Windows.Media.Ocr, Windows.Data.Pdf, Office COM, …
+│       ├── Controls/
+│       │   ├── RadialWheelCanvas.cs      # Hosts a wheel: options, hover/open/switch animation, hands frames to the renderer
+│       │   ├── CropCanvas.cs             # Crop preview: image, dimmed outside, handles, aspect lock
+│       │   └── RangeTimeline.cs          # Trim timeline with start/end handles
+│       ├── Wheel/
+│       │   ├── WheelRenderApi.cs         # IWheelRenderer (the plugin adapter), WheelFrame, WheelPalette
+│       │   ├── WheelPainter.cs           # Shared geometry, text, hub helpers for renderers
+│       │   ├── WheelRendererHost.cs      # Built-in and plugin renderers, plugin loading
+│       │   └── Renderers/                # Built-in renderers: Ring, Glass (macOS), Orbit (Dock), Neon
+│       ├── Services/
+│       │   ├── GlobalHookService.cs      # Low-level keyboard & mouse hooks for the drag gesture
+│       │   ├── ShellSelectionService.cs  # Finds the file being dragged in Explorer
+│       │   ├── IdeSelectionService.cs    # Finds the file in a VS Code-based editor's file tree (UI Automation)
+│       │   ├── DroppedFiles.cs           # Reads paths from any drag source (file lists, file:// links, path text)
+│       │   ├── WindowsShellService.cs    # Unblock downloads (Mark of the Web), desktop wallpaper
+│       │   ├── SoundService.cs           # Synthesized sound packs per template (or a template's own .wav files)
+│       │   ├── AppThemeService.cs        # Applies a template's palette to the whole app
+│       │   ├── InstallService.cs         # Per-user install/uninstall, start with Windows
+│       │   ├── TrayIconService.cs        # System tray icon
+│       │   └── NotificationService.cs    # Result and progress toasts
+│       ├── Views/
+│       │   ├── RadialWheelOverlay.xaml   # Transparent, topmost radial menu
+│       │   ├── CompressDialog.xaml       # Lossless/lossy compression options
+│       │   ├── ArchiveDialog.xaml        # Archive format, level, method, pictures, password
+│       │   ├── GuetzliResourcePanel.cs   # CPU / memory bar / time panel shared by Archive and Compress
+│       │   ├── ExtrasDialog.xaml         # "Recommended extras" prompt (FFmpeg, LibreOffice)
+│       │   ├── CropDialog / TrimDialog   # Crop on a preview; pick a video's start and end
+│       │   ├── ProtectDialog / UnlockDialog / PdfSplitDialog / PdfMergeDialog
+│       │   └── ToastNotificationWindow   # Completion & progress toasts
+│       ├── MainWindow.xaml           # Home, Settings, About (+ MainWindow.Templates.cs, .System.cs, .Dependencies.cs, .Updates.cs)
+│       └── Tests/                    # Self-test sections that need Office/WPF/Windows, and the --snapshot UI renderer
 ├── docs/
 │   ├── PLUGIN_GUIDE.md           # Beginner's guide: templates, sounds, animations, writing a plugin
 │   └── TEMPLATES.md              # Template & plugin quick reference
-├── samples/                      # Sample template.json and a sample renderer plugin
-└── Tests/                        # --test self-test suite and --snapshot UI renderer
+└── samples/                      # Sample template.json and a sample renderer plugin
 ```
 
 ---

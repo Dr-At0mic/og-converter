@@ -456,13 +456,13 @@ The sample in the repository, [`samples/WheelPluginSample`](../samples/WheelPlug
    ```powershell
    dotnet --version     # should print 10.x
    ```
-3. **The OG Converter source code**, built once. Your plugin compiles against OG Converter's public drawing API, which lives in `og-converter.dll`. The released `.exe` is a single bundled file without a separate `.dll`, so build it from source:
+3. **The OG Converter source code**, built once. Your plugin compiles against OG Converter's public drawing API, which lives in `og-converter.dll` (the options and templates it draws come from `OgConverter.Core.dll`). The released `.exe` is a single bundled file without separate `.dll` files, so build it from source:
    ```powershell
    git clone <OG Converter repository URL> og-converter
    cd og-converter
    dotnet build -c Release
    ```
-   This creates `bin\Release\net10.0-windows10.0.19041.0\og-converter.dll`. (You can also just download the source as a zip and build it.)
+   This creates `src\OgConverter.Windows\bin\Release\net10.0-windows10.0.19041.0\og-converter.dll`, with `OgConverter.Core.dll` beside it. (You can also just download the source as a zip and build it.)
 4. **An editor.** [Visual Studio 2022+](https://visualstudio.microsoft.com/) (Community edition is free; install the *.NET desktop development* workload) or [VS Code](https://code.visualstudio.com/) with the C# Dev Kit extension.
 
 ## 9. Create the project
@@ -475,7 +475,7 @@ cd HaloWheel
 del Class1.cs
 ```
 
-Open `HaloWheel.csproj` and replace its contents with this. Fix the `HintPath` so it points to the `og-converter.dll` you built:
+Open `HaloWheel.csproj` and replace its contents with this. Fix the `HintPath`s so they point to the `og-converter.dll` and `OgConverter.Core.dll` you built:
 
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
@@ -490,8 +490,12 @@ Open `HaloWheel.csproj` and replace its contents with this. Fix the `HintPath` s
 
   <ItemGroup>
     <Reference Include="og-converter">
-      <HintPath>..\og-converter\bin\Release\net10.0-windows10.0.19041.0\og-converter.dll</HintPath>
+      <HintPath>..\og-converter\src\OgConverter.Windows\bin\Release\net10.0-windows10.0.19041.0\og-converter.dll</HintPath>
       <!-- Compile against it, but don't copy it: OG Converter provides it at run time -->
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="OgConverter.Core">
+      <HintPath>..\og-converter\src\OgConverter.Windows\bin\Release\net10.0-windows10.0.19041.0\OgConverter.Core.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>
@@ -504,11 +508,14 @@ Open `HaloWheel.csproj` and replace its contents with this. Fix the `HintPath` s
 </Project>
 ```
 
-If your project lives **inside** the OG Converter repository (like `samples/WheelPluginSample`), you can use a project reference instead of the `HintPath`:
+If your project lives **inside** the OG Converter repository (like `samples/WheelPluginSample`), you can use project references instead of the `HintPath`s:
 
 ```xml
-<ProjectReference Include="..\..\og-converter.csproj" Private="false" ExcludeAssets="runtime" />
+<ProjectReference Include="..\..\src\OgConverter.Windows\OgConverter.Windows.csproj" Private="false" ExcludeAssets="runtime" />
+<ProjectReference Include="..\..\src\OgConverter.Core\OgConverter.Core.csproj" Private="false" ExcludeAssets="runtime" />
 ```
+
+(and `<DisableTransitiveProjectReferences>true</DisableTransitiveProjectReferences>` in the `PropertyGroup`, so nothing of the app is copied next to your plugin)
 
 Now add the template that uses your renderer. Create `template.json` in the project folder:
 
@@ -1030,7 +1037,7 @@ After changing your code, build again and press **Reload** in Settings: the new 
 ```powershell
 dotnet build samples\WheelPluginSample -c Release
 $env:OGCONVERTER_PLUGIN_SAMPLE = "$PWD\samples\WheelPluginSample\bin\Release\net10.0-windows10.0.19041.0\WheelPluginSample.dll"
-dotnet run --project og-converter.csproj -- --test
+dotnet run --project src\OgConverter.Windows -- --test
 ```
 
 ---

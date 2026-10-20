@@ -74,7 +74,7 @@ jobs:
       - name: Publish single-file exe
         shell: pwsh
         run: >
-          dotnet publish og-converter.csproj
+          dotnet publish src/OgConverter.Windows/OgConverter.Windows.csproj
           -c Release -r win-x64 --self-contained
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
