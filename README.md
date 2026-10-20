@@ -486,6 +486,7 @@ Bug reports, ideas and pull requests for the Windows version are welcome too. Se
 
 - **Anandhu Suresh**: [Portfolio](https://dr-at0mic.github.io/) · [GitHub](https://github.com/Dr-At0mic)
 - **Mahesh P S**: [GitHub](https://github.com/Yet-Zio)
+- **Bijo Prasad**: [GitHub](https://github.com/hikigaya007)
 
 ---
 

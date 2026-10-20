@@ -5,6 +5,10 @@ What changed in each release. The release workflow copies a version's section in
 
 Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fails if it's missing.
 
+## [1.4.1]
+
+- Developers list: added Bijo Prasad, with a GitHub link, in About and the README.
+
 ## [1.4.0]
 
 - **Archive** replaces Zip in the Actions wheel. Pack files and folders as ZIP, 7z, RAR, TAR, tar.gz, tar.bz2, tar.xz, tar.zst, tar.lz4, tar.lz, tar.br, gz, bz2, xz, zst, lz4, lz, br, cpio, ISO or ar. Each format has its own settings: compression level, method (Deflate, LZMA2, PPMd…), solid mode, all CPU cores, zstd long-range matching, Brotli window size and RAR recovery records.

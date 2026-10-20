@@ -940,6 +940,20 @@
                                         </TextBlock>
                                     </StackPanel>
                                 </StackPanel>
+
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Style="{StaticResource DevAvatar}">
+                                        <TextBlock Text="BP" Style="{StaticResource DevInitials}" />
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="Bijo Prasad" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                        <TextBlock FontSize="12" Margin="0,2,0,0">
+                                            <Hyperlink NavigateUri="https://github.com/hikigaya007" RequestNavigate="OnLinkRequestNavigate"
+                                                       Foreground="{DynamicResource AccentBrush}" TextDecorations="{x:Null}"
+                                                       ToolTip="https://github.com/hikigaya007">GitHub ↗</Hyperlink>
+                                        </TextBlock>
+                                    </StackPanel>
+                                </StackPanel>
                             </UniformGrid>
                         </StackPanel>
                     </Border>
