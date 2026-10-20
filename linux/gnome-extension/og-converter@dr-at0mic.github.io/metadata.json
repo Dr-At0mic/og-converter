@@ -1,0 +1,10 @@
+{
+  "uuid": "og-converter@dr-at0mic.github.io",
+  "name": "OG Converter",
+  "description": "Drag-and-tap helper for OG Converter: while dragging a file, tap Shift, Ctrl, Alt or Super to open the OG Converter wheel at the cursor. Sends the key taps to the OG Converter app over D-Bus.",
+  "shell-version": [
+    "50"
+  ],
+  "url": "https://github.com/dr-at0mic/og-converter",
+  "version": 1
+}
