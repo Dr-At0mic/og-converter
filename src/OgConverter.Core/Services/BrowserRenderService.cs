@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -22,7 +23,39 @@ namespace OgConverter.Services
         public static bool IsAvailable => Browser.Value != null;
         public static string? BrowserPath => Browser.Value;
 
-        public const string MissingBrowserHint = "Microsoft Edge or Google Chrome is needed for this (Edge comes with Windows).";
+        public static string MissingBrowserHint => OperatingSystem.IsWindows()
+            ? "Microsoft Edge or Google Chrome is needed for this (Edge comes with Windows)."
+            : $"Chromium, Google Chrome or Microsoft Edge is needed for this ({InstallHints.Command("chromium")}).";
+
+        /// <summary>The snap's name when the browser is a snap (Ubuntu's Chromium: /snap/bin/chromium), else null.</summary>
+        private static readonly Lazy<string?> Snap = new(() =>
+        {
+            string? browser = Browser.Value;
+            if (browser == null || OperatingSystem.IsWindows()) return null;
+            bool snap = browser.StartsWith("/snap/", StringComparison.Ordinal);
+            try
+            {
+                // /snap/bin/chromium and the like are links to /usr/bin/snap
+                snap |= File.ResolveLinkTarget(browser, returnFinalTarget: true)?.FullName == "/usr/bin/snap";
+            }
+            catch (IOException) { }
+            return snap ? Path.GetFileName(browser).Split('.')[0] : null;
+        });
+
+        /// <summary>
+        /// Where the pages the browser opens are written. A snap browser can't see the system's temp folder (it has a
+        /// private /tmp), so with one they go to its own folder in the home folder, which both sides can read and write.
+        /// </summary>
+        public static string WorkFolder
+        {
+            get
+            {
+                if (Snap.Value is not { } snap) return Path.GetTempPath();
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "snap", snap, "common", "og-converter");
+                Directory.CreateDirectory(dir);
+                return dir;
+            }
+        }
 
         /// <summary>
         /// Longest the browser waits for a page's pictures and fonts before printing what has arrived. Without it, each
@@ -37,7 +70,10 @@ namespace OgConverter.Services
         public static async Task PrintAsync(string htmlPath, string pdfPath)
         {
             if (File.Exists(pdfPath)) File.Delete(pdfPath);
-            await RunAsync(new[] { "--no-pdf-header-footer", "--print-to-pdf=" + pdfPath, new Uri(htmlPath).AbsoluteUri });
+            using var site = MakeReadable(Path.GetDirectoryName(Path.GetFullPath(htmlPath))!);
+            string page = Path.Combine(site.Path, Path.GetFileName(htmlPath));
+            await WriteThroughWorkFolderAsync(pdfPath, output =>
+                RunAsync(new[] { "--no-pdf-header-footer", "--print-to-pdf=" + output, new Uri(page).AbsoluteUri }));
             if (!File.Exists(pdfPath) || new FileInfo(pdfPath).Length == 0)
             {
                 throw new InvalidOperationException("The browser didn't produce a PDF.");
@@ -51,10 +87,11 @@ namespace OgConverter.Services
         public static async Task ScreenshotAsync(string htmlPath, string pngPath, int width = 1280)
         {
             // A copy with a script that measures the page; <base> keeps its relative pictures and styles working
-            string page = Path.Combine(Path.GetTempPath(), $"ogc-page-{Guid.NewGuid():N}.html");
+            string page = Path.Combine(WorkFolder, $"ogc-page-{Guid.NewGuid():N}.html");
+            using var site = MakeReadable(Path.GetDirectoryName(Path.GetFullPath(htmlPath))!);
             try
             {
-                await File.WriteAllBytesAsync(page, WithMeasureScript(await File.ReadAllBytesAsync(htmlPath), Path.GetDirectoryName(Path.GetFullPath(htmlPath))!));
+                await File.WriteAllBytesAsync(page, WithMeasureScript(await File.ReadAllBytesAsync(htmlPath), site.Path));
                 var watch = Stopwatch.StartNew();
                 var size = await MeasureAsync(page, width) ?? (width, 1600);
                 int height = Math.Clamp(size.Height, 1, MaxPageHeight);
@@ -90,9 +127,13 @@ namespace OgConverter.Services
 
         private static async Task WithSvgPageAsync(string svgPath, int w, int h, string extraCss, Func<string, Task> render)
         {
-            string page = Path.Combine(Path.GetTempPath(), $"ogc-svg-{Guid.NewGuid():N}.html");
+            string page = Path.Combine(WorkFolder, $"ogc-svg-{Guid.NewGuid():N}.html");
+            // A snap browser may not reach the SVG's folder (outside home, or hidden): give it a copy next to the page
+            string? copy = Snap.Value != null ? Path.ChangeExtension(page, ".svg") : null;
             try
             {
+                if (copy != null) File.Copy(svgPath, copy, overwrite: true);
+                svgPath = copy ?? svgPath;
                 string html = $$"""
                     <!DOCTYPE html>
                     <html><head><meta charset="utf-8"><style>
@@ -108,6 +149,7 @@ namespace OgConverter.Services
             finally
             {
                 TryDelete(page);
+                if (copy != null) TryDelete(copy);
             }
         }
 
@@ -190,19 +232,114 @@ namespace OgConverter.Services
         private static async Task CaptureAsync(string page, string pngPath, int width, int height, double scale, bool transparent, int loadLimitMs = PageLoadLimitMs)
         {
             if (File.Exists(pngPath)) File.Delete(pngPath);
-            var args = new List<string>
+            await WriteThroughWorkFolderAsync(pngPath, output =>
             {
-                $"--window-size={width},{height}",
-                "--force-device-scale-factor=" + scale.ToString("0.###", CultureInfo.InvariantCulture),
-                "--screenshot=" + pngPath
-            };
-            if (transparent) args.Add("--default-background-color=00000000");
-            args.Add(new Uri(page).AbsoluteUri);
-            await RunAsync(args, loadLimitMs);
+                var args = new List<string>
+                {
+                    $"--window-size={width},{height}",
+                    "--force-device-scale-factor=" + scale.ToString("0.###", CultureInfo.InvariantCulture),
+                    "--screenshot=" + output
+                };
+                if (transparent) args.Add("--default-background-color=00000000");
+                args.Add(new Uri(page).AbsoluteUri);
+                return RunAsync(args, loadLimitMs);
+            });
 
             if (!File.Exists(pngPath) || new FileInfo(pngPath).Length == 0)
             {
                 throw new InvalidOperationException("The browser didn't produce a picture.");
+            }
+        }
+
+        /// <summary>
+        /// A folder whose pages, pictures and styles the browser can read: <paramref name="folder"/> itself, or for a snap
+        /// browser, which only sees the home folder (not hidden folders, the temp folder or other drives), a copy in
+        /// <see cref="WorkFolder"/> (at most 100 MB, 4 levels deep). Disposing it deletes the copy.
+        /// </summary>
+        public static ReadableFolder MakeReadable(string folder)
+        {
+            if (Snap.Value == null || IsInsideHome(folder)) return new ReadableFolder(folder, isCopy: false);
+            string copy = Path.Combine(WorkFolder, "ogc-site-" + Guid.NewGuid().ToString("N"));
+            long budget = 100L * 1024 * 1024;
+            CopyTree(new DirectoryInfo(folder), copy, ref budget, depth: 0);
+            return new ReadableFolder(copy, isCopy: true);
+        }
+
+        /// <summary>A folder the browser can read; see <see cref="MakeReadable"/>.</summary>
+        public sealed class ReadableFolder : IDisposable
+        {
+            private readonly bool _isCopy;
+
+            internal ReadableFolder(string path, bool isCopy)
+            {
+                Path = path;
+                _isCopy = isCopy;
+            }
+
+            public string Path { get; }
+
+            public void Dispose()
+            {
+                if (!_isCopy) return;
+                try { Directory.Delete(Path, true); } catch { }
+            }
+        }
+
+        /// <summary>In the home folder and not in a hidden folder there: what a snap app may read.</summary>
+        private static bool IsInsideHome(string path)
+        {
+            string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('/') + "/";
+            string full = Path.GetFullPath(path).TrimEnd('/') + "/";
+            return full.StartsWith(home, StringComparison.Ordinal)
+                   && !full[home.Length..].Split('/', StringSplitOptions.RemoveEmptyEntries).Any(part => part.StartsWith('.'));
+        }
+
+        private static void CopyTree(DirectoryInfo dir, string target, ref long budget, int depth)
+        {
+            Directory.CreateDirectory(target);
+            try
+            {
+                foreach (var file in dir.EnumerateFiles())
+                {
+                    if (file.Length > budget) continue;
+                    try
+                    {
+                        file.CopyTo(Path.Combine(target, file.Name));
+                        budget -= file.Length;
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+                }
+                if (depth >= 4) return;
+                foreach (var sub in dir.EnumerateDirectories())
+                {
+                    if (budget <= 0) return;
+                    if (sub.LinkTarget != null || sub.Name.StartsWith('.')) continue;
+                    CopyTree(sub, Path.Combine(target, sub.Name), ref budget, depth + 1);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+
+        /// <summary>
+        /// Lets the browser write <paramref name="target"/>. A snap browser can only write inside the home folder, so it
+        /// writes into <see cref="WorkFolder"/> and the result is moved into place.
+        /// </summary>
+        private static async Task WriteThroughWorkFolderAsync(string target, Func<string, Task> run)
+        {
+            if (Snap.Value == null)
+            {
+                await run(target);
+                return;
+            }
+            string output = Path.Combine(WorkFolder, $"ogc-out-{Guid.NewGuid():N}{Path.GetExtension(target)}");
+            try
+            {
+                await run(output);
+                if (File.Exists(output)) File.Move(output, target, overwrite: true);
+            }
+            finally
+            {
+                TryDelete(output);
             }
         }
 
@@ -212,7 +349,7 @@ namespace OgConverter.Services
             string browser = Browser.Value ?? throw new InvalidOperationException(MissingBrowserHint);
 
             // A private profile: otherwise the call is handed to a browser window that's already open and returns at once
-            string profile = Path.Combine(Path.GetTempPath(), "ogc-browser-" + Guid.NewGuid().ToString("N"));
+            string profile = Path.Combine(WorkFolder, "ogc-browser-" + Guid.NewGuid().ToString("N"));
             var psi = new ProcessStartInfo(browser)
             {
                 UseShellExecute = false,

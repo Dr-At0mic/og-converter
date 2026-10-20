@@ -243,7 +243,7 @@ namespace OgConverter.Services
         public static void ImageToPdf(string imagePath, string targetPath)
         {
             var image = ImageCodec.TryLoad(imagePath, applyOrientation: true, maxDimension: 0)
-                ?? throw new InvalidOperationException($"Windows can't decode {Path.GetFileName(imagePath)}.");
+                ?? throw new InvalidOperationException(OperatingSystem.IsWindows() ? $"Windows can't decode {Path.GetFileName(imagePath)}." : $"{Path.GetFileName(imagePath)} can't be decoded.");
 
             using var data = new MemoryStream();
             string ext = Path.GetExtension(imagePath).ToLowerInvariant();

@@ -22,7 +22,7 @@ namespace OgConverter.Services
             var engine = Platform.Ocr ?? throw new InvalidOperationException(NotAvailable);
             // Decoded upright (EXIF rotation applied) so phone photos are read the right way up, and huge scans fit the engine
             var image = ImageCodec.TryLoad(imagePath, applyOrientation: true, maxDimension: engine.MaxImageDimension)
-                        ?? throw new InvalidOperationException("Windows can't open this picture to read its text.");
+                        ?? throw new InvalidOperationException(OperatingSystem.IsWindows() ? "Windows can't open this picture to read its text." : "This picture can't be opened to read its text.");
             return await RecognizeAsync(image.Bitmap);
         }
 

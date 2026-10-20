@@ -66,7 +66,7 @@ namespace OgConverter.Services
         public static void Encrypt(string sourcePath, string targetPath, string password, FileCipher cipher, KeyDerivation kdf)
         {
             if (cipher == FileCipher.ChaCha20Poly1305 && !IsChaChaSupported)
-                throw new PlatformNotSupportedException("ChaCha20-Poly1305 isn't available on this version of Windows. Use AES-256-GCM.");
+                throw new PlatformNotSupportedException(OperatingSystem.IsWindows() ? "ChaCha20-Poly1305 isn't available on this version of Windows. Use AES-256-GCM." : "ChaCha20-Poly1305 isn't available on this system. Use AES-256-GCM.");
 
             byte[] header = new byte[HeaderSize];
             Magic.CopyTo(header, 0);
@@ -344,7 +344,7 @@ namespace OgConverter.Services
         }
 
         private static IAead CreateAead(byte cipherId, byte[] key) => cipherId == 2
-            ? (IsChaChaSupported ? new ChaChaAead(key) : throw new PlatformNotSupportedException("This file uses ChaCha20-Poly1305, which isn't available on this version of Windows."))
+            ? (IsChaChaSupported ? new ChaChaAead(key) : throw new PlatformNotSupportedException((OperatingSystem.IsWindows() ? "This file uses ChaCha20-Poly1305, which isn't available on this version of Windows." : "This file uses ChaCha20-Poly1305, which isn't available on this system.")))
             : new GcmAead(key);
 
         private static void BuildNonce(byte[] header, uint counter, bool last, byte[] nonce)

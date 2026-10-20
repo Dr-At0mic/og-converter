@@ -106,14 +106,17 @@ namespace OgConverter.Services
             };
         }
 
+        /// <summary>The libarchive tar that writes 7z / xz / cpio / ISO / ar without 7-Zip.</summary>
+        private static string SystemTar => OperatingSystem.IsWindows() ? "Windows tar" : "bsdtar";
+
         /// <summary>Who does the work, for the dialog's summary line.</summary>
         public static string EngineName(ArchiveFormat f, ArchiveOptions o) => f.Key switch
         {
             "rar" => "WinRAR",
-            "7z" => DependencyService.SevenZipPath != null ? "7-Zip" : "Windows tar",
-            "xz" or "tar.xz" => ArchiveService.BsdTarHas("liblzma") ? "Windows tar" : "7-Zip",
-            "lz" or "tar.lz" => ArchiveService.BsdTarHas("liblzma") ? "Windows tar" : "built in",
-            "cpio" or "iso" or "ar" => "Windows tar",
+            "7z" => DependencyService.SevenZipPath != null ? "7-Zip" : SystemTar,
+            "xz" or "tar.xz" => ArchiveService.BsdTarHas("liblzma") ? SystemTar : "7-Zip",
+            "lz" or "tar.lz" => ArchiveService.BsdTarHas("liblzma") ? SystemTar : "built in",
+            "cpio" or "iso" or "ar" => SystemTar,
             _ => "built in"
         };
 
@@ -417,7 +420,9 @@ namespace OgConverter.Services
         /// <param name="contentsAtRoot">Put a folder's contents at the root (disc images) instead of the folder itself.</param>
         private static async Task RunBsdTarAsync(string source, string target, string format, string? filter, string? options, bool contentsAtRoot = false)
         {
-            string tar = ArchiveService.BsdTarPath ?? throw new InvalidOperationException("This format needs Windows 10 (1803) or later, which includes tar.exe.");
+            string tar = ArchiveService.BsdTarPath ?? throw new InvalidOperationException(OperatingSystem.IsWindows()
+                ? "This format needs Windows 10 (1803) or later, which includes tar.exe."
+                : $"This format needs bsdtar ({InstallHints.Command("bsdtar")}).");
             var args = new List<string> { "-c", "-f", target, "--format", format };
             if (filter != null) args.Add(filter);
             if (options != null) args.AddRange(new[] { "--options", options });

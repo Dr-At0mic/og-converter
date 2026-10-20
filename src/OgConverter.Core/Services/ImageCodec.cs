@@ -18,6 +18,9 @@ namespace OgConverter.Services
     /// <summary>Image helpers for the compression pipeline. Decoding and encoding go through <see cref="Platform.Images"/>.</summary>
     public static class ImageCodec
     {
+        /// <summary>The error when no decoder reads a picture.</summary>
+        public static string CantOpenPicture => OperatingSystem.IsWindows() ? "Windows can't open this picture." : "This picture can't be opened.";
+
         /// <summary>
         /// Decodes the first frame. Returns null if there's no decoder for the format.
         /// With <paramref name="applyOrientation"/> the EXIF rotation is baked into the pixels;

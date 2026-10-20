@@ -335,7 +335,9 @@ namespace OgConverter.Services
             // The system's own image codecs as a fallback for basic images if FFmpeg is not in PATH
             if (TryNativeImageConvert(input, targetPath, ext)) return;
 
-            throw new InvalidOperationException($"FFmpeg is required to convert from .{sourceExt} to .{ext}. Install it (winget install Gyan.FFmpeg) or put ffmpeg.exe next to OG Converter, then restart OG Converter.");
+            throw new InvalidOperationException(OperatingSystem.IsWindows()
+                ? $"FFmpeg is required to convert from .{sourceExt} to .{ext}. Install it (winget install Gyan.FFmpeg) or put ffmpeg.exe next to OG Converter, then restart OG Converter."
+                : $"FFmpeg is required to convert from .{sourceExt} to .{ext}. Install it ({InstallHints.Command("ffmpeg")}), then restart OG Converter.");
         }
 
         private static bool NeedsRasterizing(string ext) => ext is "svg" or "heic" or "heif";
@@ -835,7 +837,7 @@ namespace OgConverter.Services
                 });
                 if (saved != null) return saved;
 
-                if (!IsFFmpegAvailable) throw new InvalidOperationException("Windows can't open this picture.");
+                if (!IsFFmpegAvailable) throw new InvalidOperationException(ImageCodec.CantOpenPicture);
                 string png = Path.Combine(dir, $"wallpaper-{stamp}.png");
                 await RunFFmpegAsync(picture, new[] { "-i", picture, "-frames:v", "1", "-update", "1", png }, null);
                 return png;

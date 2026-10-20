@@ -43,12 +43,13 @@ namespace OgConverter.Services
             ["bsdtar"] = new[] { "libarchive-tools", "bsdtar", "libarchive", "bsdtar" },
             ["wl-clipboard"] = new[] { "wl-clipboard", "wl-clipboard", "wl-clipboard", "wl-clipboard" },
             ["xclip"] = new[] { "xclip", "xclip", "xclip", "xclip" },
-            ["poppler"] = new[] { "poppler-utils", "poppler-utils", "poppler", "poppler-tools" }
+            ["poppler"] = new[] { "poppler-utils", "poppler-utils", "poppler", "poppler-tools" },
+            ["libheif-examples"] = new[] { "libheif-examples", "libheif-tools", "libheif", "libheif1" }
         };
 
         /// <summary>
         /// "sudo apt install ffmpeg" for a tool key ("ffmpeg", "libreoffice", "7zip", "rar", "guetzli", "tesseract",
-        /// "tesseract-eng", "chromium", "bsdtar", "wl-clipboard", "xclip", "poppler"). Linux only.
+        /// "tesseract-eng", "chromium", "bsdtar", "wl-clipboard", "xclip", "poppler", "libheif-examples"). Linux only.
         /// </summary>
         public static string Command(string tool)
         {
