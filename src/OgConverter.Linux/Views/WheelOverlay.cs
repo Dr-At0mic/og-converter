@@ -195,8 +195,11 @@ namespace OgConverter.Views
                 foreach (var v in _hintHost.GetVisualDescendants()) if (v is Layoutable l) l.InvalidateMeasure();
                 _hintHost.InvalidateMeasure();
                 _hintHost.Measure(Size.Infinity);
-                _hintSize = _hintHost.DesiredSize;
+                // DesiredSize includes the (negative) tuck margin; the bar itself is taller than that
+                var m = _hintHost.Margin;
+                _hintSize = new Size(_hintHost.DesiredSize.Width - m.Left - m.Right, _hintHost.DesiredSize.Height - m.Top - m.Bottom);
                 width = Math.Max(width, _hintSize.Width + 24);
+                // Tucked into the wheel's shadow, with room below for the bar's own shadow
                 height += _hintSize.Height - 22 * _scale + 14;
             }
             Width = Math.Ceiling(width);

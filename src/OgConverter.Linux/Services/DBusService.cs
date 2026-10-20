@@ -52,6 +52,12 @@ namespace OgConverter.Services
         /// <summary>This process's bus presence when it owns <see cref="BusName"/>; null without a session bus.</summary>
         public static DBusService? Primary { get; private set; }
 
+        /// <summary>
+        /// The app's one session-bus connection, for other services (notifications, the FileManager1 portal, settings)
+        /// to share instead of opening their own. Null when there is no session bus.
+        /// </summary>
+        public static DBusConnection? Connection => Primary?._connection;
+
         /// <summary>The wheel asked for on this process's command line (<c>--wheel &lt;file&gt; [--mode m]</c>).</summary>
         public static (string Path, WheelMode Mode)? StartupWheel { get; private set; }
 
