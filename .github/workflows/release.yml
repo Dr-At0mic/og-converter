@@ -1,4 +1,4 @@
-# Builds the self-contained Windows .exe and publishes it to GitHub Releases.
+# Builds the self-contained Windows .exe and the Linux (beta) build, and publishes both to GitHub Releases.
 #
 # Release by adding a "## [1.0.0]" section to CHANGELOG.md (what changed; shown in the app's updater), then pushing a version tag:
 #   git tag v1.0.0
@@ -23,7 +23,55 @@ permissions:
   contents: write # create the release and upload the .exe
 
 jobs:
+  # Linux (beta): the single-file build, packed as .tar.gz so it keeps its executable bit.
+  # Not an AppImage yet, so Linux copies don't update themselves (the app links to the release page instead).
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then version="${{ github.event.inputs.version }}"; else version="${GITHUB_REF_NAME#v}"; fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "Version '$version' must look like 1.0.0"; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish single-file Linux build
+        run: >
+          dotnet publish src/OgConverter.Linux/OgConverter.Linux.csproj
+          -c Release -r linux-x64 --self-contained
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.version.outputs.version }}
+          -o publish
+
+      - name: Package
+        shell: bash
+        run: |
+          name="og-converter-v${{ steps.version.outputs.version }}-linux-x64.tar.gz"
+          mkdir -p dist
+          chmod +x publish/og-converter
+          tar -czf "dist/$name" -C publish og-converter
+          (cd dist && sha256sum "$name" > "$name.sha256")
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/
+          if-no-files-found: error
+
   release:
+    needs: linux
     runs-on: windows-latest
 
     steps:
@@ -56,13 +104,16 @@ jobs:
           if (-not $notes) { throw "The '## [$version]' section in CHANGELOG.md is empty." }
           $tag = "${{ steps.version.outputs.tag }}"
           @(
-            "## OG Converter $tag (Windows x64)", "",
-            "Download **og-converter-$tag-win-x64.exe** and run it; no install or .NET runtime needed. Already installed? Use **Settings > System > Check for updates**.", "",
+            "## OG Converter $tag (Windows x64 and Linux x64 beta)", "",
+            "**Windows:** download **og-converter-$tag-win-x64.exe** and run it; no install or .NET runtime needed. Already installed? Use **Settings > System > Check for updates**.", "",
+            "**Linux (beta):** download **og-converter-$tag-linux-x64.tar.gz**, then ``tar -xzf`` it and run ``./og-converter``. Install it from **Settings > System**, and on GNOME turn on drag-and-tap in **Settings > Desktop integration**.", "",
             "## What's new", "", $notes, "",
+            "## Linux is in beta", "",
+            "Everything works except custom templates that ship a renderer plugin (``.dll``): plugins are Windows only for now, and such templates are drawn with the classic ring on Linux. Drag-and-tap needs GNOME (other desktops: the file manager's right-click menu), and Linux copies don't update themselves yet. We'll be sorting these out soon. If you notice anything else, please open an issue.", "",
             "## Requirements", "",
-            "- Requires Windows 10 (1809) or later. Linux support is coming soon.",
-            "- Media features (video, audio, GIF, WebP/AVIF/JPEG XL) need FFmpeg: ``winget install Gyan.FFmpeg``",
-            "- Verify the download with the ``.sha256`` file: ``Get-FileHash <file> -Algorithm SHA256``", "",
+            "- Windows: Windows 10 (1809) or later. Media features (video, audio, GIF, WebP/AVIF/JPEG XL) need FFmpeg: ``winget install Gyan.FFmpeg``",
+            "- Linux: 64-bit, glibc. Optional tools (Ubuntu): ``sudo apt install ffmpeg libreoffice chromium tesseract-ocr tesseract-ocr-eng 7zip libarchive-tools wl-clipboard xclip poppler-utils libheif-examples``",
+            "- Verify a download with its ``.sha256`` file: ``Get-FileHash <file> -Algorithm SHA256`` on Windows, ``sha256sum -c <file>.sha256`` on Linux", "",
             "Found a bug or hit a problem? Please open an issue."
           ) -join "`n" | Out-File -Encoding utf8 release-notes.md
 
@@ -93,6 +144,12 @@ jobs:
           "exe=dist/$name" >> $env:GITHUB_OUTPUT
           "sha=dist/$name.sha256" >> $env:GITHUB_OUTPUT
 
+      - name: Download the Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: linux
+          path: dist-linux
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -104,3 +161,4 @@ jobs:
           files: |
             ${{ steps.assets.outputs.exe }}
             ${{ steps.assets.outputs.sha }}
+            dist-linux/*

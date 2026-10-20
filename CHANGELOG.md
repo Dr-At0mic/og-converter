@@ -5,6 +5,21 @@ What changed in each release. The release workflow copies a version's section in
 
 Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fails if it's missing.
 
+## [Unreleased]
+
+Rename this section to the new version (for example `## [1.5.0]`) before tagging.
+
+- **Linux version (beta)**: OG Converter now runs on Linux, as `og-converter-vX.Y.Z-linux-x64.tar.gz` next to the Windows exe.
+  The wheel, the dashboard, every dialog, notifications, the tray and templates work. On GNOME, a small helper extension
+  (Settings › Desktop integration) brings drag-and-tap; on other desktops, use the file manager's right-click menu.
+  **Still being sorted out:** templates with a renderer plugin (`.dll`) are Windows only for now and are drawn with the classic ring
+  on Linux, and Linux copies don't update themselves yet (the updater links to the release page). Please report any bugs you notice.
+- **Crop**: zoom in with Ctrl+scroll or the new −/+ buttons, scroll or middle-drag to move around, **Fit** to see the whole picture and
+  **Width** to fill the width at the top of the selection, which makes long pictures (a README saved as one image) easy to crop.
+  Dragging a handle past the edge scrolls the picture.
+- Web pages, Markdown and SVG: two jobs that render at the same time no longer delete each other's output (which failed with "The
+  browser didn't produce a PDF"), a browser that exits without output gets one more try, and the error now says why the browser failed.
+
 ## [1.4.1]
 
 - Developers list: added Bijo Prasad, with a GitHub link, in About and the README.

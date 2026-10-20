@@ -6,7 +6,7 @@ Welcome to the **og-converter** workspace. Every AI agent (Google Antigravity, C
 
 ## 1. Project Context & Status
 
-- **Project Description**: OG Converter, a zero-click offline file converter. Drag a file, tap a modifier key, and a radial wheel opens at the cursor (Convert / Tools / Actions). Windows app released; a Linux port is in progress on branch `feature/linux-port`.
+- **Project Description**: OG Converter, a zero-click offline file converter. Drag a file, tap a modifier key, and a radial wheel opens at the cursor (Convert / Tools / Actions). Windows app released; the Linux app (branch `feature/linux-port`) is a beta: everything works except renderer plugins (Windows only for now).
 - **Primary Tech Stack**: .NET 10, C#.
 
 | Folder | What it is |

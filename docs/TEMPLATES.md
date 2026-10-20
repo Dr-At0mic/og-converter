@@ -14,6 +14,10 @@ OG Converter ships with five:
 
 Pick one in **Settings › Wheel templates** (hover a card to preview its animation) or from the switcher on **Home**.
 
+> 🐧 **Linux (beta):** the five built-ins and every `template.json` / `.ogtemplate` template work the same on Linux. Renderer plugins
+> (`.dll`) are **Windows only for now**: they're built on WPF, and the Linux app can't load plugins yet, so a template that ships one
+> is drawn with the `ring` renderer there. This will be sorted out soon; please [report](../../../issues) anything else that looks off.
+
 > **New to this?** The step-by-step [beginner's guide](PLUGIN_GUIDE.md) explains every setting and walks through writing a plugin. This page is the short reference.
 
 There are two ways to make your own:
@@ -27,7 +31,7 @@ There are two ways to make your own:
 - Or drag any of those, or a folder, onto the template gallery.
 - Or copy a folder containing `template.json` into the templates folder (**Folder** button), then press **Reload**.
 
-Templates live in `%AppData%\OGConverter\Templates\<name>\`, one folder each. Set the `OGCONVERTER_TEMPLATES_DIR` environment variable to use a different folder (handy for a portable setup or for testing).
+Templates live in `%AppData%\OGConverter\Templates\<name>\` (Linux: `~/.config/OGConverter/Templates/<name>/`), one folder each. Set the `OGCONVERTER_TEMPLATES_DIR` environment variable to use a different folder (handy for a portable setup or for testing).
 
 > **Plugins are programs.** A `.dll` runs with the same access to your files as OG Converter. The app asks before adding one. Only install plugins from people you trust.
 

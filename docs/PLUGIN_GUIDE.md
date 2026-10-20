@@ -3,6 +3,11 @@
 This guide walks you through creating a **wheel template** for OG Converter, from changing a few colors to writing a plugin that draws a brand-new wheel. You don't need any programming experience for Part 1. Part 2 assumes you can install tools and copy-paste code; everything else is explained along the way.
 
 > Looking for a quick lookup table instead? See [TEMPLATES.md](TEMPLATES.md).
+>
+> 🐧 **Linux (beta):** Part 1 (templates without code) works on Linux too; the templates folder there is
+> `~/.config/OGConverter/Templates`. Part 2 (renderer plugins) is **Windows only for now**: plugins are built on WPF, and the Linux app
+> can't load them yet, so on Linux a plugin template is drawn with the classic ring. Linux plugin support is being worked on and will be
+> sorted out soon.
 
 ---
 
@@ -451,7 +456,7 @@ The sample in the repository, [`samples/WheelPluginSample`](../samples/WheelPlug
 
 ## 8. What you need
 
-1. **Windows 10 or 11.**
+1. **Windows 10 or 11.** Plugins only run in the Windows app for now (see the Linux note at the top).
 2. **The .NET 10 SDK.** Download it from <https://dotnet.microsoft.com/download> and install it. Check it works in a terminal (PowerShell):
    ```powershell
    dotnet --version     # should print 10.x

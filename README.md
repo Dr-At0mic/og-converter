@@ -1,9 +1,9 @@
 # OG Converter ⚡
-> The zero-click offline file converter for Windows (inspired by Tangerine for Mac).
+> The zero-click offline file converter for Windows and Linux (beta) (inspired by Tangerine for Mac).
 
 *Powered by pure boredom, caffeine, and living in a world with no superpowers, no magic, and no zombie apocalypse to save us from desk jobs.*
 
-Drag a file anywhere in Windows, tap your configured hotkey (e.g. **Shift**), and drop. Turn files into the formats you need without breaking your flow. Everything happens 100% locally on your PC.
+Drag a file anywhere in Windows (or in your Linux file manager), tap your configured hotkey (e.g. **Shift**), and drop. Turn files into the formats you need without breaking your flow. Everything happens 100% locally on your PC.
 
 ### 🎬 See it in action
 
@@ -17,8 +17,12 @@ https://github.com/user-attachments/assets/22a06ab1-d5d4-4027-9332-6b280cf2b70c
 
 ![OG Converter home screen](Assets/public/og-home.png)
 
-> **Platform support:** this version runs on **Windows only** (Windows 10 1809+ / Windows 11).
-> A **Linux version is coming soon**: work starts in a few days. If you'd like to help build it, please reach out (see [Contributing](#-contributing)).
+> **Platform support:** **Windows** 10 (1809+) / 11, and **Linux (beta)**, x64.
+>
+> 🐧 **The Linux version is a beta release.** Converting, Tools, Actions, the wheel, the dashboard and the dialogs all work.
+> Custom templates still have some rough edges: templates that ship a renderer **plugin** (`.dll`) don't work on Linux yet
+> (see [Linux (beta)](#-linux-beta) for the details). This will be sorted out soon.
+> If you notice anything off, please **[report the bug](../../issues)**.
 
 > **Project status:** this is **not a fully optimized release** yet. What it does aim for is staying light while it waits in the background.
 > Measured on Windows 11 with the self-contained release build (see [Memory & startup](#-memory--startup) for details):
@@ -224,6 +228,10 @@ A template sets how the wheel **looks, moves and sounds**, and the whole app (Ho
 
 > Plugins are programs and run with the same access as OG Converter. The app asks before adding one; only install plugins from people you trust.
 
+> 🐧 **On Linux (beta):** the five built-in templates and `template.json` / `.ogtemplate` templates without a plugin work the same as on Windows.
+> Renderer **plugins** (`.dll`) are Windows only for now: they're built on WPF, and the Linux app can't load plugins yet, so a template that
+> ships one is drawn with the classic ring instead. Plugin support on Linux is being worked on and will be sorted out soon.
+
 ---
 
 ## ⚙️ Settings
@@ -272,8 +280,10 @@ Measured on Windows 11 with the self-contained release build (`dotnet publish` c
 ## 🚀 How to Run
 
 ### Download
-Grab `og-converter-vX.Y.Z-win-x64.exe` from [Releases](../../releases) and run it: no installer or .NET runtime needed.
+**Windows:** grab `og-converter-vX.Y.Z-win-x64.exe` from [Releases](../../releases) and run it: no installer or .NET runtime needed.
 It runs portable; to install it, see [Install, start with Windows, uninstall](#install-start-with-windows-uninstall) below.
+
+**Linux (beta):** grab `og-converter-vX.Y.Z-linux-x64.tar.gz`; see [Linux (beta)](#-linux-beta) below.
 
 ### Requirements
 **To use the app:** Windows 10 (1809) or later. That's all: the exe starts and converts PDFs, JPEG/PNG/TIFF/BMP, text, Markdown and archives on its own.
@@ -373,6 +383,71 @@ The workflow stamps the version (shown in About), publishes the exe, and uses th
 Adding `-p:EnableCompressionInSingleFile=true` shrinks the exe to ≈74 MB, but it then uses ≈60 MB more RAM at runtime
 (assemblies are decompressed into memory), so the release build ships uncompressed.
 
+The Linux build (works from Windows too):
+```bash
+dotnet publish src/OgConverter.Linux/OgConverter.Linux.csproj -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/linux
+```
+Output: `publish/linux/og-converter` (≈110 MB). Copy it to a Linux machine with `scp` or a USB stick; VM drag-and-drop and shared
+clipboards often cut large files short, which makes the program crash on start (compare `sha256sum` if in doubt).
+
+---
+
+## 🐧 Linux (beta)
+
+The Linux version runs the same engine as the Windows one (`OgConverter.Core`) with its own Avalonia UI. It's a **beta**: everything
+below works, but expect some rough edges. Tested on Ubuntu 26.04 with GNOME 50 on Wayland.
+
+**What works:** the Convert, Tools and Actions wheels, the dashboard (Home, Settings, About, history), every dialog (Compress, Archive,
+Protect/Unlock, PDF split/merge, Crop, Trim), notifications, the tray icon, sounds, the five built-in templates, `template.json` and
+`.ogtemplate` templates, `--convert`, `--test` and `--snapshot`.
+
+**Current limitations** (being worked on, and will be sorted out soon):
+- **Custom templates with a renderer plugin (`.dll`)** don't work yet. Plugins are built on WPF, which only runs on Windows, and the
+  Linux app can't load plugins at all yet; such templates are drawn with the classic ring.
+- **Drag-and-tap needs GNOME Shell 50** (through a small helper extension, see below). On other desktops, open the wheel from the file
+  manager's right-click menu (Files, Dolphin, Nemo) or with `og-converter --wheel <file>`.
+- **Updates**: the Linux download isn't an AppImage yet, so **Check for updates** shows what's new and links to the release page instead
+  of updating in place.
+- Microsoft Office, winget, Windows OCR and Unblock are Windows features; on Linux, LibreOffice handles Office files and Tesseract reads text.
+
+Found a bug, or something that works differently from Windows? Please **[open an issue](../../issues)** and mention your distribution and desktop.
+
+### Install and run
+```bash
+tar -xzf og-converter-vX.Y.Z-linux-x64.tar.gz
+chmod +x og-converter
+./og-converter
+```
+Then, in the dashboard:
+1. **Settings › System › Install** copies it to `~/.local/share/og-converter`, adds it to your app menu and `~/.local/bin`, and starts it
+   in the tray when you log in (no root needed).
+2. **Settings › Desktop integration › Install** sets up the GNOME helper extension. GNOME only loads extensions when you log in, so
+   **log out and back in once**. The same page adds **OG Converter** to the file managers' right-click menus.
+
+GNOME on Wayland doesn't let apps see keys while you drag, so the extension watches for the key tap during a drag and tells
+OG Converter over D-Bus. It runs only while OG Converter is running; see [`linux/gnome-extension`](linux/gnome-extension).
+
+### Requirements
+**To use the app:** a 64-bit Linux desktop (glibc). Like on Windows, the tools below are optional: missing ones leave out the options
+that need them, and **Settings › Engine** shows the install command for your package manager (apt, dnf, pacman or zypper).
+
+```bash
+# Ubuntu / Debian: everything in one go
+sudo apt install ffmpeg libreoffice chromium tesseract-ocr tesseract-ocr-eng 7zip libarchive-tools wl-clipboard xclip poppler-utils libheif-examples
+```
+
+| Optional tool | Unlocks |
+|---|---|
+| FFmpeg | Video, audio, GIF, WebP, AVIF, JPEG XL; video crop and trim |
+| LibreOffice | Word, Excel, PowerPoint and OpenDocument conversions |
+| Chromium, Google Chrome or Microsoft Edge | Markdown → PDF/PNG, web page → PDF/PNG/JPG, SVG conversions (the Chromium snap works) |
+| Tesseract (+ a language, e.g. `tesseract-ocr-eng`) | Extract Text / Copy Text from pictures and scanned PDFs |
+| 7-Zip (`7z`), bsdtar (`libarchive-tools`) | Password 7z archives; CPIO, ISO and other tar formats |
+| `wl-clipboard` / `xclip` | Copy Path, Copy Image, Copy Text, Base64 |
+| `libheif-examples` | HEIC/HEIF photos (FFmpeg is used otherwise) |
+
+Settings and templates live in `~/.config/OGConverter`.
+
 ---
 
 ## 🛠️ Architecture
@@ -410,7 +485,7 @@ OGConverter/
 │   │   │   └── SettingsService.cs        # JSON settings in %AppData%\OGConverter
 │   │   ├── CommandLine.cs            # --convert
 │   │   └── Tests/                    # --test runner and its portable sections
-│   └── OgConverter.Windows/          # The WPF app (og-converter.exe)
+│   ├── OgConverter.Windows/          # The WPF app (og-converter.exe)
 │       ├── Platform/Windows/         # Windows side of Platform: WIC imaging, Windows.Media.Ocr, Windows.Data.Pdf, Office COM, …
 │       ├── Controls/
 │       │   ├── RadialWheelCanvas.cs      # Hosts a wheel: options, hover/open/switch animation, hands frames to the renderer
@@ -443,6 +518,11 @@ OGConverter/
 │       │   └── ToastNotificationWindow   # Completion & progress toasts
 │       ├── MainWindow.xaml           # Home, Settings, About (+ MainWindow.Templates.cs, .System.cs, .Dependencies.cs, .Updates.cs)
 │       └── Tests/                    # Self-test sections that need Office/WPF/Windows, and the --snapshot UI renderer
+│   └── OgConverter.Linux/            # The Avalonia app for Linux (og-converter), beta: same layout as the Windows app
+│       ├── Platform/Linux/           # Linux side of Platform: SkiaSharp imaging, PDFium, Tesseract OCR, wl-copy/xclip, xdg-open, …
+│       ├── Services/                 # D-Bus trigger (DBusService), WheelController, install, GNOME extension, file-manager menus, tray
+│       └── Wheel/, Views/, Controls/ # Ports of the Windows wheel, dialogs and controls (built-in renderers only, no plugins yet)
+├── linux/gnome-extension/        # GNOME Shell helper: reports "key tapped during a drag" to the app over D-Bus
 ├── docs/
 │   ├── PLUGIN_GUIDE.md           # Beginner's guide: templates, sounds, animations, writing a plugin
 │   └── TEMPLATES.md              # Template & plugin quick reference
@@ -488,9 +568,11 @@ OGConverter/
 
 ## 🐧 Contributing
 
-The **Linux version** is the next big step, and work on it starts in a few days. If you want to help (Linux desktop integration, global drag detection on X11/Wayland, packaging, testing), please get in touch: open an issue or reach out through the portfolio link below.
+The **Linux version** is out as a **beta**. Help is very welcome with what's left: renderer plugins on Linux, drag-and-tap on desktops
+other than GNOME (KDE, X11 sessions), AppImage packaging, and testing on other distributions. Open an issue or reach out through the
+portfolio link below.
 
-Bug reports, ideas and pull requests for the Windows version are welcome too. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit changes.
+Bug reports, ideas and pull requests for both versions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit changes.
 
 ---
 
