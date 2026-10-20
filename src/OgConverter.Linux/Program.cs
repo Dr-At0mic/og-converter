@@ -12,6 +12,7 @@ namespace OgConverter
         {
             // Before anything else: the services, the UI and the command-line modes below all use the Linux implementations
             LinuxPlatform.Register();
+            Wheel.LinuxWheel.Register();
 
             AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             {
@@ -41,6 +42,14 @@ namespace OgConverter
             {
                 return Task.Run(() => CommandLine.ConvertAsync(args)).GetAwaiter().GetResult();
             }
+
+            if (args.Length > 0 && args[0] == "--snapshot-wheel")
+            {
+                return Wheel.WheelSnapshot.Run(args.Length > 1 ? args[1] : "wheel-snapshots");
+            }
+
+            // One app per session: a second launch hands "--wheel <file>" or "come forward" to the running one and exits
+            if (Services.DBusService.ClaimOrForward(args)) return 0;
 
             return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
         }
