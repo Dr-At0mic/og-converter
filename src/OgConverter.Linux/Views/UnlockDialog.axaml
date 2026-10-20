@@ -1,0 +1,43 @@
+<v:DialogWindow xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:c="using:OgConverter.Controls"
+                xmlns:v="using:OgConverter.Views"
+                x:Class="OgConverter.Views.UnlockDialog"
+                Title="Unlock" Width="460">
+
+    <Border Classes="DialogCard">
+        <StackPanel>
+            <!-- Header (drag to move) -->
+            <Grid Classes="DialogHeader" ColumnDefinitions="Auto,*" PointerPressed="OnHeaderPointerPressed">
+                <Border Classes="DialogBadge" Background="{DynamicResource ModeActionsSubtleBrush}">
+                    <TextBlock Text="{c:Icon E785}" Classes="Icon" Foreground="{DynamicResource ModeActionsBrush}" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="HeaderTitle" Text="Unlock" Classes="H2" />
+                    <TextBlock x:Name="FileInfoText" Classes="Caption" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Margin="24,0,24,0">
+                <TextBlock Text="Password" Classes="FieldLabel" />
+                <TextBox x:Name="PasswordInput" Classes="Password" TextChanged="OnInputChanged" />
+                <CheckBox x:Name="ShowPasswordCheck" Content="Show password" Margin="0,12,0,0" FontSize="12.5" IsCheckedChanged="OnShowPasswordChanged" />
+
+                <Border Classes="StatusLine" Margin="0,16,0,0">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="StatusIcon" Classes="Icon" FontSize="12" Margin="0,0,8,0" VerticalAlignment="Top" />
+                        <TextBlock x:Name="StatusText" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="360" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- Footer -->
+            <Border Classes="DialogFooter">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Cancel" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
+                    <Button x:Name="ConfirmButton" Theme="{StaticResource AccentButton}" Content="Unlock" IsDefault="True" Click="OnConfirmClick" MinWidth="88" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</v:DialogWindow>

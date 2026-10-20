@@ -1,0 +1,71 @@
+<v:DialogWindow xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:c="using:OgConverter.Controls"
+                xmlns:v="using:OgConverter.Views"
+                x:Class="OgConverter.Views.ExtrasDialog"
+                Title="Recommended extras" Width="540" Topmost="False">
+
+    <Border Classes="DialogCard">
+        <StackPanel>
+            <!-- Header (drag to move) -->
+            <Grid Classes="DialogHeader" ColumnDefinitions="Auto,*" PointerPressed="OnHeaderPointerPressed">
+                <Border Classes="DialogBadge" Background="{DynamicResource AccentSubtleBrush}">
+                    <TextBlock Text="{c:Icon E896}" Classes="Icon" Foreground="{DynamicResource AccentBrush}" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Recommended extras" Classes="H2" />
+                    <TextBlock Classes="Caption" Margin="0,2,0,0"
+                               Text="Free helpers that unlock more formats. Pick what you want; you can always add them later in Settings › Engine." />
+                </StackPanel>
+            </Grid>
+
+            <StackPanel Margin="24,0,24,0">
+                <!-- FFmpeg -->
+                <Border x:Name="FFmpegRow" Background="{DynamicResource InputBrush}" CornerRadius="8" Padding="14,12" Margin="0,0,0,10">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <CheckBox x:Name="FFmpegCheck" IsChecked="True" VerticalAlignment="Top" Margin="0,1,10,0" IsCheckedChanged="OnPickChanged" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="FFmpeg" FontWeight="SemiBold" />
+                            <TextBlock Classes="Caption" Margin="0,2,0,0"
+                                       Text="Video, audio, GIF, WebP and AVIF conversion and compression, plus video crop and trim." />
+                            <TextBlock x:Name="FFmpegStatus" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap" IsVisible="False" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- LibreOffice -->
+                <Border x:Name="LibreOfficeRow" Background="{DynamicResource InputBrush}" CornerRadius="8" Padding="14,12" Margin="0,0,0,10">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <CheckBox x:Name="LibreOfficeCheck" IsChecked="True" VerticalAlignment="Top" Margin="0,1,10,0" IsCheckedChanged="OnPickChanged" />
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="LibreOffice (free office suite)" FontWeight="SemiBold" />
+                            <TextBlock Classes="Caption" Margin="0,2,0,0"
+                                       Text="LibreOffice wasn't found. It's free, works offline and opens Word, Excel and PowerPoint files. About 350 MB." />
+                            <TextBlock x:Name="LibreOfficeStatus" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap" IsVisible="False" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- The command (installing needs root, so the user runs it) -->
+                <TextBlock x:Name="CommandLabel" Text="Run this in a terminal" FontWeight="SemiBold" Margin="2,6,0,8" />
+                <Grid x:Name="CommandPanel" ColumnDefinitions="*,Auto">
+                    <Border Background="{DynamicResource InputBrush}" CornerRadius="6" Padding="10,8">
+                        <SelectableTextBlock x:Name="CommandText" Classes="Mono" FontSize="12.5" TextWrapping="Wrap" />
+                    </Border>
+                    <Button x:Name="CopyButton" Grid.Column="1" Content="Copy" Click="OnCopyClick" Margin="8,0,0,0" VerticalAlignment="Center" />
+                </Grid>
+
+                <TextBlock x:Name="FooterNote" Classes="Caption" Foreground="{DynamicResource TextTertiaryBrush}" Margin="2,12,0,0"
+                           Text="Installed from your distribution's official packages. Click Check again when it's done." />
+            </StackPanel>
+
+            <!-- Footer -->
+            <Border Classes="DialogFooter" Margin="0,18,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button x:Name="CancelButton" Content="Not now" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
+                    <Button x:Name="ConfirmButton" Theme="{StaticResource AccentButton}" Content="Check again" IsDefault="True" Click="OnConfirmClick" MinWidth="120" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</v:DialogWindow>

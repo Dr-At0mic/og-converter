@@ -1,0 +1,717 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Styling;
+using Avalonia.Threading;
+using OgConverter.Controls;
+using OgConverter.Models;
+using OgConverter.Services;
+
+namespace OgConverter.Views
+{
+    /// <summary>
+    /// Compress any file: pick Lossless or Lossy, start from a preset, then fine-tune format, quality, size and
+    /// the options that matter for that kind of file. The summary line always says exactly what will happen.
+    /// </summary>
+    public partial class CompressDialog : DialogWindow
+    {
+        private readonly string _path = string.Empty;
+        private readonly string _ext = string.Empty;
+        private readonly CompressionKind _kind;
+        private string? _ffmpeg;
+        private CompressionOptions _o = new();
+        private readonly SettingsBuilder _ui;
+
+        // Learned in the background after opening
+        private MediaInfo? _media;
+        private LoadedImage? _image;
+        private HashSet<string> _workingHardware = new();
+        private HashSet<string> _encoders = new();
+
+        private readonly List<(RadioButton Chip, Func<CompressionOptions, bool> IsActive)> _presetChips = new();
+        private bool _building;
+
+        public CompressionOptions? Result { get; private set; }
+
+        /// <summary>For the XAML previewer.</summary>
+        public CompressDialog()
+        {
+            InitializeComponent();
+            _ui = new SettingsBuilder(SettingsPanel, () => _building, Refresh, Rebuild);
+        }
+
+        public CompressDialog(string path, CompressionOptions? initial, string? ffmpeg)
+        {
+            InitializeComponent();
+            _ui = new SettingsBuilder(SettingsPanel, () => _building, Refresh, Rebuild);
+            _path = path;
+            _ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+            _kind = CompressionService.KindOf(path) ?? CompressionKind.General;
+            _ffmpeg = ffmpeg;
+            _o = CompressionService.Normalize(_kind, path, initial ?? CompressionService.Defaults(_kind, path));
+
+            HeaderText.Text = "Compress " + _kind switch
+            {
+                CompressionKind.Image => "image",
+                CompressionKind.AnimatedGif => "GIF",
+                CompressionKind.Svg => "SVG",
+                CompressionKind.Video => "video",
+                CompressionKind.Audio => "audio",
+                CompressionKind.Pdf => "PDF",
+                CompressionKind.Office => "document",
+                CompressionKind.Archive => "archive",
+                _ => "file"
+            };
+            SetFileInfo(null);
+            ToolTip.SetTip(FileInfoText, path);
+
+            (LosslessHint.Text, LossyHint.Text) = _kind switch
+            {
+                CompressionKind.Image => ("Pixel-identical. Optimized encoding, metadata removed.", "Much smaller. WebP, AVIF, JPEG XL or fewer colors."),
+                CompressionKind.AnimatedGif => ("Every frame identical, as animated WebP.", "Fewer colors and frames, smaller size."),
+                CompressionKind.Video => ("No quality change. Remux, or archival codecs.", "Re-encode with a modern codec. Huge savings."),
+                CompressionKind.Audio => ("Bit-perfect audio (FLAC / ALAC, or tags removed).", "Opus, AAC or MP3 at the bitrate you choose."),
+                CompressionKind.Pdf => ("Text and images untouched. Structure optimized.", "Images downsampled and re-encoded (like Acrobat)."),
+                CompressionKind.Office => ("Package re-zipped, PNGs optimized losslessly.", "Pictures resized like Office's Compress Pictures."),
+                _ => ("Exact copy back when decompressed.", "")
+            };
+            if (!CompressionService.IsLossyAvailable(_kind))
+            {
+                LossyCard.IsEnabled = false;
+                LossyHint.Text = "Not possible for this file type: every byte matters.";
+            }
+
+            Opened += async (_, _) =>
+            {
+                if (Screens.ScreenFromWindow(this) is { } screen) BodyScroller.MaxHeight = Math.Max(360, screen.WorkingArea.Height / screen.Scaling - 220);
+                _building = true;
+                (_o.Mode == CompressionMode.Lossless ? LosslessCard : LossyCard).IsChecked = true;
+                _building = false;
+                Rebuild();
+                await InspectAsync();
+            };
+        }
+
+        /// <summary>Learns about the file (dimensions, duration, transparency, working GPU encoders) without blocking the dialog.</summary>
+        private async Task InspectAsync()
+        {
+            try
+            {
+                switch (_kind)
+                {
+                    case CompressionKind.Image:
+                        _image = await Task.Run(() => ImageCodec.TryLoad(_path, applyOrientation: true, maxDimension: 0));
+                        break;
+                    case CompressionKind.Video or CompressionKind.Audio or CompressionKind.AnimatedGif when _ffmpeg != null:
+                        _media = await MediaToolkit.ProbeAsync(_ffmpeg, _path);
+                        break;
+                }
+                if (_ffmpeg != null && _kind is CompressionKind.Video or CompressionKind.Image or CompressionKind.AnimatedGif or CompressionKind.Audio)
+                {
+                    _encoders = await MediaToolkit.GetEncodersAsync(_ffmpeg);
+                }
+                SetFileInfo(null);
+                Rebuild();
+
+                if (_kind == CompressionKind.Video && _ffmpeg != null)
+                {
+                    _workingHardware = await MediaToolkit.GetWorkingHardwareEncodersAsync(_ffmpeg);
+                    Rebuild();
+                }
+            }
+            catch
+            {
+                // Inspection is a nicety; the dialog works without it
+            }
+        }
+
+        private void SetFileInfo(string? extra)
+        {
+            var parts = new List<string> { Path.GetFileName(_path) };
+            try { parts.Add(FormatSize(new FileInfo(_path).Length)); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            if (_image != null) parts.Add($"{_image.Bitmap.Width} × {_image.Bitmap.Height}");
+            if (_media != null)
+            {
+                if (_media.HasVideo && _media.Width > 0) parts.Add($"{_media.Width} × {_media.Height}");
+                if (_media.DurationSeconds > 0) parts.Add(FormatDuration(_media.DurationSeconds));
+                if (_media.HasVideo && _media.Fps > 0) parts.Add($"{_media.Fps:0.##} fps");
+                if (_kind == CompressionKind.Audio && _media.AudioKbps > 0) parts.Add($"{_media.AudioKbps} kbps");
+            }
+            if (extra != null) parts.Add(extra);
+            FileInfoText.Text = string.Join("  •  ", parts);
+        }
+
+        // ---------- Building the settings UI ----------
+
+        private void OnModeChanged(object? sender, RoutedEventArgs e)
+        {
+            if (_building || !IsLoaded || sender is RadioButton { IsChecked: not true }) return;
+            var mode = LosslessCard.IsChecked == true ? CompressionMode.Lossless : CompressionMode.Lossy;
+            if (mode == _o.Mode) return;
+            // Each mode has its own sensible format; keep the rest of the choices
+            _o.Mode = mode;
+            var choices = Choices();
+            if (!choices.Any(c => c.Key == _o.Format))
+            {
+                var def = CompressionService.Defaults(_kind, _path);
+                _o.Format = def.Mode == mode && choices.Any(c => c.Key == def.Format) ? def.Format : choices.FirstOrDefault().Key ?? "keep";
+            }
+            Rebuild();
+        }
+
+        private List<(string Key, string Label)> Choices() =>
+            CompressionService.FormatChoices(_kind, _path, _o.Mode, _image?.HasAlpha == true);
+
+        private void Rebuild()
+        {
+            if (_path.Length == 0) return;
+            _building = true;
+            try
+            {
+                SettingsPanel.Children.Clear();
+                PresetPanel.Children.Clear();
+                _presetChips.Clear();
+
+                bool lossy = _o.Mode == CompressionMode.Lossy;
+                switch (_kind)
+                {
+                    case CompressionKind.Image: BuildImage(lossy); break;
+                    case CompressionKind.AnimatedGif: BuildGif(lossy); break;
+                    case CompressionKind.Video: BuildVideo(lossy); break;
+                    case CompressionKind.Audio: BuildAudio(lossy); break;
+                    case CompressionKind.Pdf: BuildPdf(lossy); break;
+                    case CompressionKind.Office: BuildOffice(lossy); break;
+                    default: BuildGeneral(); break;
+                }
+                PresetSection.IsVisible = _presetChips.Count > 0;
+            }
+            finally
+            {
+                _building = false;
+            }
+            Refresh();
+        }
+
+        private void BuildImage(bool lossy)
+        {
+            if (lossy)
+            {
+                Preset("Max quality", o => o.Quality = 90, o => o.Quality == 90);
+                Preset("High", o => o.Quality = 80, o => o.Quality == 80);
+                Preset("Balanced", o => o.Quality = 70, o => o.Quality == 70);
+                Preset("Small", o => o.Quality = 55, o => o.Quality == 55);
+                Preset("Tiny", o => o.Quality = 40, o => o.Quality == 40);
+            }
+
+            FormatCombo("Format");
+            if (lossy)
+            {
+                bool palette = _o.Format == "keep" && _ext == "png";
+                QualitySlider(palette ? "Colors" : "Quality", q => palette ? $"{CompressionService.PaletteColors(q)} colors" : FormatImageQuality(q));
+                ResizeCombo(_image?.Bitmap is { } b ? Math.Max(b.Width, b.Height) : 0);
+            }
+            if (_o.Format == "guetzli" && GuetzliService.IsAvailable && lossy && GuetzliMegapixels() is { } megapixels)
+            {
+                var specs = GuetzliService.Specs();
+                if (megapixels > GuetzliService.SafeMegapixels(specs) || _o.GuetzliAllowLarge)
+                {
+                    _ui.Check("Do it anyway, even if it needs more than the free memory", _o.GuetzliAllowLarge, v => { _o.GuetzliAllowLarge = v; Dispatcher.UIThread.Post(Rebuild); });
+                    _ui.Note("No admin rights are needed: the system lends apps all the memory it has, then swap. Resizing (Longest edge) makes it smaller and much faster.");
+                }
+                // The bar shows what it needs even when that's more than is free
+                _ui.Add(GuetzliResourcePanel.Build(GuetzliService.Plan(new[] { megapixels }, 1, true, specs)));
+            }
+            _ui.Check("Remove metadata (GPS location, camera details, editing history)", _o.StripMetadata, v => _o.StripMetadata = v);
+        }
+
+        private void BuildGif(bool lossy)
+        {
+            if (lossy)
+            {
+                Preset("High", o => { o.Quality = 85; o.MaxFps = 0; }, o => o.Quality == 85 && o.MaxFps == 0);
+                Preset("Balanced", o => { o.Quality = 65; o.MaxFps = 0; }, o => o.Quality == 65 && o.MaxFps == 0);
+                Preset("Small", o => { o.Quality = 45; o.MaxFps = 15; }, o => o.Quality == 45 && o.MaxFps == 15);
+                Preset("Chat sticker", o => { o.Quality = 40; o.MaxFps = 15; o.MaxDimension = 480; }, o => o.Quality == 40 && o.MaxFps == 15 && o.MaxDimension == 480);
+            }
+            FormatCombo("Output");
+            if (lossy)
+            {
+                QualitySlider(_o.Format == "gif" ? "Colors" : "Quality", q => _o.Format == "gif" ? $"{CompressionService.PaletteColors(q)} colors" : FormatImageQuality(q));
+                ResizeCombo(0);
+                _ui.Combo("Frame rate", new (object, string)[] { (0, "Original"), (30, "30 fps"), (24, "24 fps"), (20, "20 fps"), (15, "15 fps"), (10, "10 fps") },
+                    _o.MaxFps, v => _o.MaxFps = (int)v);
+            }
+            else
+            {
+                _ui.Note("Animated WebP keeps every frame and color exactly, usually at a fraction of the GIF's size. It plays in browsers, chat apps and image viewers.");
+            }
+        }
+
+        private void BuildVideo(bool lossy)
+        {
+            if (!lossy)
+            {
+                FormatCombo("Method");
+                if (_o.Format is "x264" or "x265") SpeedCombo();
+                _ui.Check("Remove metadata (location, device, titles)", _o.StripMetadata, v => _o.StripMetadata = v);
+                _ui.Note(_o.Format == "remux"
+                    ? "Copies the video and audio exactly as they are into a fresh container, dropping junk data and moving the index to the front for faster streaming. Instant, but savings are small."
+                    : "True lossless re-encoding only shrinks near-uncompressed sources (screen recordings, ProRes, DNxHD, raw AVI). A normal MP4 will usually get bigger. Use Lossy at high quality for a visually identical, much smaller file.");
+                return;
+            }
+
+            Preset("High quality", o => { o.TargetSizeMb = 0; o.Quality = 75; o.MaxHeight = 0; o.Speed = 2; }, o => o.TargetSizeMb == 0 && o.Quality == 75 && o.MaxHeight == 0 && o.Speed == 2);
+            Preset("Balanced", o => { o.TargetSizeMb = 0; o.Quality = 60; o.MaxHeight = 0; o.Speed = 1; }, o => o.TargetSizeMb == 0 && o.Quality == 60 && o.MaxHeight == 0 && o.Speed == 1);
+            Preset("Small", o => { o.TargetSizeMb = 0; o.Quality = 45; o.MaxHeight = 1080; o.Speed = 2; }, o => o.TargetSizeMb == 0 && o.Quality == 45 && o.MaxHeight == 1080 && o.Speed == 2);
+            Preset("Discord · 10 MB", o => { o.Format = "h264"; o.TargetSizeMb = 10; o.MaxHeight = 720; o.MaxFps = 30; o.VideoAudioKbps = 96; },
+                o => o.TargetSizeMb == 10 && o.Format == "h264" && o.MaxHeight == 720);
+            Preset("WhatsApp · 16 MB", o => { o.Format = "h264"; o.TargetSizeMb = 15; o.MaxHeight = 720; o.MaxFps = 30; o.VideoAudioKbps = 96; },
+                o => o.TargetSizeMb == 15 && o.Format == "h264" && o.MaxHeight == 720);
+            Preset("Email · 25 MB", o => { o.Format = "h264"; o.TargetSizeMb = 24; o.MaxHeight = 1080; o.VideoAudioKbps = 128; },
+                o => o.TargetSizeMb == 24 && o.Format == "h264" && o.MaxHeight == 1080);
+
+            FormatCombo("Codec");
+
+            // Rate control: quality (constant quality) or a target file size (two-pass where the encoder supports it)
+            _ui.Label("Size control");
+            var rateRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            var byQuality = new RadioButton { Content = "Constant quality", GroupName = "Rate", IsChecked = _o.TargetSizeMb <= 0, Margin = new Thickness(0, 0, 18, 0) };
+            var bySize = new RadioButton { Content = "Target file size", GroupName = "Rate", IsChecked = _o.TargetSizeMb > 0 };
+            byQuality.IsCheckedChanged += (_, _) => { if (_building || byQuality.IsChecked != true) return; _o.TargetSizeMb = 0; Dispatcher.UIThread.Post(Rebuild); };
+            bySize.IsCheckedChanged += (_, _) =>
+            {
+                if (_building || bySize.IsChecked != true) return;
+                double current = new FileInfo(_path).Length / 1024.0 / 1024.0;
+                _o.TargetSizeMb = Math.Max(1, Math.Round(current / 2));
+                Dispatcher.UIThread.Post(Rebuild);
+            };
+            rateRow.Children.Add(byQuality);
+            rateRow.Children.Add(bySize);
+            _ui.Add(rateRow);
+
+            if (_o.TargetSizeMb > 0)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
+                var box = new TextBox { Width = 90, Text = _o.TargetSizeMb.ToString("0.##", CultureInfo.CurrentCulture) };
+                box.TextChanged += (_, _) =>
+                {
+                    if (_building) return;
+                    _o.TargetSizeMb = double.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out double mb) && mb > 0 ? mb : -1;
+                    Refresh();
+                };
+                row.Children.Add(box);
+                var unit = new TextBlock { Text = "MB", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+                unit.Bind(TextBlock.ForegroundProperty, this.GetResourceObservable("TextSecondaryBrush"));
+                row.Children.Add(unit);
+                _ui.Add(row);
+            }
+            else
+            {
+                QualitySlider("Quality", q => _o.Format switch
+                {
+                    "h265" => $"{q}  (CRF {CompressionService.X265Crf(q)})",
+                    "av1" => $"{q}  (CRF {CompressionService.Av1Crf(q)})",
+                    "vp9" => $"{q}  (CRF {CompressionService.Vp9Crf(q)})",
+                    _ => $"{q}  (CRF {CompressionService.X264Crf(q)})"
+                });
+            }
+
+            var resolutions = new List<(object, string)> { (0, "Original") };
+            foreach (var (h, name) in new[] { (2160, "4K (2160p)"), (1440, "1440p"), (1080, "1080p"), (720, "720p"), (480, "480p"), (360, "360p") })
+            {
+                int shortEdge = _media is { Width: > 0 } m ? Math.Min(m.Width, m.Height) : int.MaxValue;
+                if (h < shortEdge || (int)_o.MaxHeight == h) resolutions.Add((h, name));
+            }
+            _ui.Combo("Resolution", resolutions, _o.MaxHeight, v => _o.MaxHeight = (int)v);
+
+            var rates = new List<(object, string)> { (0, "Original") };
+            foreach (int f in new[] { 60, 30, 24 })
+            {
+                if (_media == null || _media.Fps <= 0 || _media.Fps > f + 0.5 || _o.MaxFps == f) rates.Add((f, $"{f} fps"));
+            }
+            _ui.Combo("Frame rate", rates, _o.MaxFps, v => _o.MaxFps = (int)v);
+
+            SpeedCombo();
+
+            string audioCodec = _o.Format == "vp9" ? "Opus" : "AAC";
+            _ui.Combo("Audio", new (object, string)[]
+            {
+                (0, "Keep original"), (192, $"{audioCodec} 192 kbps"), (160, $"{audioCodec} 160 kbps"), (128, $"{audioCodec} 128 kbps"),
+                (96, $"{audioCodec} 96 kbps"), (64, $"{audioCodec} 64 kbps"), (-1, "Remove audio")
+            }, _o.VideoAudioKbps, v => _o.VideoAudioKbps = (int)v);
+
+            string? gpu = HardwareEncoderFor(_o.Format);
+            var gpuCheck = _ui.Check(gpu != null
+                    ? $"Use the GPU encoder ({DescribeHardware(gpu)}): many times faster, slightly larger files"
+                    : _o.Format == "vp9" ? "GPU encoding isn't available for VP9" : "GPU encoding: no compatible graphics encoder found for this codec",
+                _o.UseHardwareEncoder && gpu != null, v => _o.UseHardwareEncoder = v);
+            gpuCheck.IsEnabled = gpu != null;
+
+            _ui.Check("Remove metadata (location, device, titles)", _o.StripMetadata, v => _o.StripMetadata = v);
+        }
+
+        private void BuildAudio(bool lossy)
+        {
+            if (!lossy)
+            {
+                FormatCombo("Format");
+                if (_o.Format != "keep") _ui.Check("Remove tags and cover art", _o.StripMetadata, v => _o.StripMetadata = v);
+                _ui.Note(_o.Format == "keep"
+                    ? "This file is already in a lossy format, so the audio is copied untouched and only tags and embedded artwork are removed. For a real size reduction, use Lossy."
+                    : "Decodes to exactly the same samples as the original. FLAC is the standard for lossless music; ALAC plays natively in Apple Music and on iPhone.");
+                return;
+            }
+
+            // Presets adapt to the chosen codec: each codec needs a different bitrate for the same quality
+            (int Opus, int Aac, int Mp3)[] levels = { (160, 256, 245), (128, 192, 190), (96, 128, 130), (64, 64, 65), (32, 48, 65) };
+            string[] names = { "Transparent", "High", "Standard", "Voice / podcast", "Smallest" };
+            for (int i = 0; i < levels.Length; i++)
+            {
+                var l = levels[i];
+                bool mono = i >= 3;
+                Preset(names[i], o => { o.AudioKbps = Pick(o.Format, l); o.Mono = mono; }, o => o.AudioKbps == Pick(o.Format, l) && o.Mono == mono);
+            }
+
+            FormatCombo("Codec");
+            var bitrates = (_o.Format == "opus" ? new[] { 256, 192, 160, 128, 112, 96, 80, 64, 48, 32, 24 }
+                          : _o.Format == "mp3" ? new[] { 245, 225, 190, 175, 165, 130, 115, 100, 85, 65 }
+                          : new[] { 320, 256, 192, 160, 128, 112, 96, 80, 64, 48 })
+                .Select(k => ((object)k, _o.Format == "mp3" ? $"≈{k} kbps (V{CompressionService.LameVbrLevel(k)})" : $"{k} kbps")).ToList();
+            if (!bitrates.Any(b => (int)b.Item1 == _o.AudioKbps))
+            {
+                int nearest = bitrates.Select(b => (int)b.Item1).OrderBy(k => Math.Abs(k - _o.AudioKbps)).First();
+                _o.AudioKbps = nearest;
+            }
+            _ui.Combo("Bitrate", bitrates, _o.AudioKbps, v => _o.AudioKbps = (int)v);
+            _ui.Combo("Channels", new (object, string)[] { (false, "Keep original"), (true, "Mono (half the data, fine for speech)") }, _o.Mono, v => _o.Mono = (bool)v);
+            if (_o.Format != "opus")
+            {
+                _ui.Combo("Sample rate", new (object, string)[] { (0, "Keep original"), (48000, "48 kHz"), (44100, "44.1 kHz"), (32000, "32 kHz"), (22050, "22.05 kHz (speech)") },
+                    _o.SampleRate, v => _o.SampleRate = (int)v);
+            }
+            _ui.Check("Remove tags and cover art", _o.StripMetadata, v => _o.StripMetadata = v);
+
+            static int Pick(string format, (int Opus, int Aac, int Mp3) l) => format switch { "opus" => l.Opus, "mp3" => l.Mp3, _ => l.Aac };
+        }
+
+        private void BuildPdf(bool lossy)
+        {
+            if (!lossy)
+            {
+                _ui.Check("Remove metadata (author, title, creator app)", _o.StripMetadata, v => _o.StripMetadata = v);
+                _ui.Note("Re-compresses every stream at maximum, compresses uncompressed fonts and content, and drops page thumbnails and unused objects. Text, vectors and images stay exactly the same.");
+                return;
+            }
+
+            Preset("Screen · 72 dpi", o => { o.PdfDpi = 72; o.Quality = 60; }, o => o.PdfDpi == 72 && o.Quality == 60);
+            Preset("eBook · 150 dpi", o => { o.PdfDpi = 150; o.Quality = 75; }, o => o.PdfDpi == 150 && o.Quality == 75);
+            Preset("Print · 300 dpi", o => { o.PdfDpi = 300; o.Quality = 85; }, o => o.PdfDpi == 300 && o.Quality == 85);
+            Preset("Archive · 300 dpi", o => { o.PdfDpi = 300; o.Quality = 92; }, o => o.PdfDpi == 300 && o.Quality == 92);
+
+            _ui.Combo("Image resolution", new (object, string)[]
+            {
+                (72, "72 dpi (screen, smallest)"), (96, "96 dpi"), (120, "120 dpi"), (150, "150 dpi (ebook, readable when zoomed)"),
+                (200, "200 dpi"), (300, "300 dpi (print)")
+            }, _o.PdfDpi, v => _o.PdfDpi = (int)v);
+            QualitySlider("JPEG quality", FormatImageQuality);
+            _ui.Check("Convert images to grayscale", _o.Grayscale, v => _o.Grayscale = v);
+            _ui.Check("Remove metadata (author, title, creator app)", _o.StripMetadata, v => _o.StripMetadata = v);
+            _ui.Note("Text and vector graphics stay sharp; only photos and scans are resampled. Masks and special color spaces are left untouched.");
+        }
+
+        private void BuildOffice(bool lossy)
+        {
+            if (lossy)
+            {
+                Preset("Email · 96 ppi", o => { o.MaxDimension = 1280; o.Quality = 70; }, o => o.MaxDimension == 1280 && o.Quality == 70);
+                Preset("Web · 150 ppi", o => { o.MaxDimension = 1920; o.Quality = 80; }, o => o.MaxDimension == 1920 && o.Quality == 80);
+                Preset("Print · 220 ppi", o => { o.MaxDimension = 2800; o.Quality = 85; }, o => o.MaxDimension == 2800 && o.Quality == 85);
+                Preset("HD · 330 ppi", o => { o.MaxDimension = 4000; o.Quality = 90; }, o => o.MaxDimension == 4000 && o.Quality == 90);
+
+                _ui.Combo("Largest picture size", new (object, string)[]
+                {
+                    (1024, "1024 px"), (1280, "1280 px (email)"), (1600, "1600 px"), (1920, "1920 px (web, screens)"),
+                    (2560, "2560 px"), (2800, "2800 px (print)"), (4000, "4000 px (HD print)")
+                }, _o.MaxDimension, v => _o.MaxDimension = (int)v);
+                QualitySlider("JPEG quality", FormatImageQuality);
+            }
+            _ui.Check("Remove personal info (author, last editor, company)", _o.StripMetadata, v => _o.StripMetadata = v);
+            _ui.Note(lossy
+                ? "Photos are resized and re-encoded in place, keeping their file names and formats, so the layout doesn't change. Text, tables and charts are untouched."
+                : "Re-zips the document at maximum compression and losslessly optimizes PNG pictures. Opens exactly the same.");
+        }
+
+        private void BuildGeneral()
+        {
+            FormatCombo(_kind == CompressionKind.Svg ? "Output" : "Format");
+            _ui.Note(_kind switch
+            {
+                CompressionKind.Svg => "Removes comments, editor data (Inkscape, Illustrator, Sketch), metadata and formatting whitespace. The drawing is unchanged. .svgz is understood by browsers and vector editors.",
+                CompressionKind.Archive => "Repacks every entry at the highest compression level. Contents are unchanged.",
+                _ when _ext == "json" => "Minified JSON drops indentation and line breaks; the data is identical. The archive formats keep the file exactly as-is.",
+                _ => "ZIP opens on every computer. GZip and Brotli compress a single file further; Brotli is the best for text, code and data files."
+            });
+        }
+
+        // ---------- Control builders ----------
+
+        private void Preset(string label, Action<CompressionOptions> apply, Func<CompressionOptions, bool> isActive)
+        {
+            var chip = new RadioButton { Content = label, GroupName = "Preset" };
+            if (this.TryFindResource("PresetChip", out object? theme) && theme is ControlTheme chipTheme) chip.Theme = chipTheme;
+            chip.Click += (_, _) =>
+            {
+                apply(_o);
+                Rebuild();
+            };
+            _presetChips.Add((chip, isActive));
+            PresetPanel.Children.Add(chip);
+        }
+
+        private void FormatCombo(string label)
+        {
+            var choices = Choices();
+            _ui.Combo(label, choices.Select(c => ((object)c.Key, c.Label)).ToList(), _o.Format, v => _o.Format = (string)v, rebuild: true);
+        }
+
+        private void SpeedCombo() =>
+            _ui.Combo("Encoding speed", new (object, string)[]
+            {
+                (0, "Fast"), (1, "Balanced"), (2, "Slower, smaller file"), (3, "Slowest, smallest file")
+            }, _o.Speed, v => _o.Speed = (int)v);
+
+        private void ResizeCombo(int longestEdge)
+        {
+            var sizes = new List<(object, string)> { (0, "Original size") };
+            foreach (var (px, name) in new[] { (3840, "3840 px (4K)"), (2560, "2560 px"), (1920, "1920 px (Full HD)"), (1600, "1600 px"),
+                                               (1280, "1280 px"), (1024, "1024 px"), (800, "800 px"), (640, "640 px"), (480, "480 px") })
+            {
+                if (longestEdge == 0 || px < longestEdge || _o.MaxDimension == px) sizes.Add((px, name));
+            }
+            _ui.Combo("Longest edge", sizes, _o.MaxDimension, v => _o.MaxDimension = (int)v, rebuild: _o.Format == "guetzli");
+        }
+
+        private void QualitySlider(string label, Func<int, string> describe) =>
+            _ui.Slider(label, 1, 100, _o.Quality, v => _o.Quality = v, describe, "Smaller file", "Better quality");
+
+        /// <summary>The picture's size after the optional resize (Longest edge), or null before it's been inspected.</summary>
+        private double? GuetzliMegapixels()
+        {
+            if (_image == null) return null;
+            double w = _image.Bitmap.Width, h = _image.Bitmap.Height;
+            double scale = _o.MaxDimension > 0 && Math.Max(w, h) > _o.MaxDimension ? _o.MaxDimension / Math.Max(w, h) : 1;
+            return w * h * scale * scale / 1e6;
+        }
+
+        private void OnToolInstalled(object? sender, EventArgs e)
+        {
+            // FFmpeg may have just been installed: look again, then rebuild with its encoders
+            if (_ffmpeg == null)
+            {
+                var engine = new ConversionEngine();
+                _ffmpeg = engine.IsFFmpegAvailable ? engine.FFmpegPath : null;
+                if (_ffmpeg != null)
+                {
+                    _ = InspectAsync();
+                    return;
+                }
+            }
+            Rebuild();
+        }
+
+        // ---------- Summary, validation ----------
+
+        /// <summary>Re-evaluates preset highlights, the summary and warnings after any change.</summary>
+        private void Refresh()
+        {
+            if (_path.Length == 0) return;
+            foreach (var (chip, isActive) in _presetChips) chip.IsChecked = isActive(_o);
+
+            var warnings = new List<string>();
+            string? error = Validate(warnings, out Dependency? missingTool);
+            ToolMissing.Show(missingTool, missingTool switch
+            {
+                Dependency.FFmpeg => "This needs FFmpeg, which wasn't found.",
+                Dependency.Guetzli => "Guetzli isn't installed yet. It's a small program from your distribution's packages.",
+                _ => null
+            });
+
+            SummaryText.Text = error ?? CompressionService.Describe(_kind, _path, _o, _media, HardwareEncoderFor(_o.Format) != null);
+            SummaryText.Foreground = Brush(error != null ? "DangerBrush" : "TextPrimaryBrush");
+            SummaryIcon.Text = IconExtension.Glyph(error != null ? "E783" : "E946");
+            SummaryIcon.Foreground = Brush(error != null ? "DangerBrush" : "TextSecondaryBrush");
+            WarningText.Text = string.Join("\n", warnings);
+            WarningText.IsVisible = warnings.Count > 0;
+            ConfirmButton.IsEnabled = error == null;
+        }
+
+        /// <summary>Returns a blocking problem, and adds non-blocking advice to <paramref name="warnings"/>.</summary>
+        private string? Validate(List<string> warnings, out Dependency? missingTool)
+        {
+            missingTool = null;
+            bool lossy = _o.Mode == CompressionMode.Lossy;
+
+            bool needsFFmpeg = _kind switch
+            {
+                CompressionKind.Video or CompressionKind.Audio or CompressionKind.AnimatedGif => true,
+                CompressionKind.Image => _o.Format is "webp" or "avif" or "jxl" || (lossy && _o.Format == "keep" && _ext is "png" or "webp" or "avif"),
+                _ => false
+            };
+            if (needsFFmpeg && _ffmpeg == null)
+            {
+                missingTool = Dependency.FFmpeg;
+                return "This needs FFmpeg. Install it, or choose another format.";
+            }
+
+            string? missing = _o.Format switch
+            {
+                "webp" when _kind == CompressionKind.Image => "libwebp",
+                "webp" when _kind == CompressionKind.AnimatedGif => "libwebp_anim",
+                "jxl" => "libjxl",
+                "avif" => _encoders.Contains("libaom-av1") ? null : "libsvtav1",
+                "h265" when !_o.UseHardwareEncoder => "libx265",
+                "av1" when !_o.UseHardwareEncoder => _encoders.Contains("libsvtav1") ? null : "libaom-av1",
+                "vp9" => "libvpx-vp9",
+                "opus" => "libopus",
+                "mp3" when _kind == CompressionKind.Audio => "libmp3lame",
+                _ => null
+            };
+            if (missing != null && _encoders.Count > 0 && !_encoders.Contains(missing))
+            {
+                return $"Your FFmpeg build has no {missing} encoder. Install your distribution's full ffmpeg package or choose another format.";
+            }
+
+            switch (_kind)
+            {
+                case CompressionKind.Image:
+                    if (_o.Format == "guetzli")
+                    {
+                        if (!GuetzliService.IsAvailable)
+                        {
+                            missingTool = Dependency.Guetzli;
+                            return "Guetzli isn't installed yet. Install it, or choose another format.";
+                        }
+                        if (_o.Quality < GuetzliService.MinQuality) warnings.Add($"Guetzli works from quality {GuetzliService.MinQuality} up, so {GuetzliService.MinQuality} is used.");
+                        if (GuetzliMegapixels() is { } megapixels)
+                        {
+                            var plan = GuetzliService.Plan(new[] { megapixels }, 1, _o.GuetzliAllowLarge);
+                            if (plan.Included.Count == 0)
+                                return $"At {megapixels:0.#} megapixels this needs about {SystemSpecs.Gb(GuetzliService.BytesFor(megapixels))} of memory; {SystemSpecs.Gb(plan.Specs.FreeRamBytes)} is free. Choose a smaller Longest edge, close some apps, or tick \"Do it anyway\".";
+                            if (plan.MemoryLoad > 1)
+                                warnings.Add("This needs more than the free memory: the system will use swap, which is much slower and can make the computer sluggish.");
+                            warnings.Add($"Guetzli is slow: {GuetzliService.DescribeTime(plan.Seconds)} for this picture.");
+                        }
+                        break;
+                    }
+                    if (_o.Format == "jxl") warnings.Add("JPEG XL opens in GIMP, Krita, Photoshop, Safari and most Linux image viewers; many browsers can't show it yet.");
+                    if (_o.Format == "avif") warnings.Add("AVIF opens in modern browsers, phones and image viewers; older software may not.");
+                    if (lossy && _o.Format == "keep" && _ext == "png" && _image?.HasPartialAlpha == true)
+                        warnings.Add("This PNG has soft transparency, which a reduced palette would ruin; it will be optimized (and resized if chosen) instead. WebP keeps soft edges and is much smaller.");
+                    if (!lossy && _o.Format == "keep" && _ext is "jpg" or "jpeg" && !_o.StripMetadata)
+                        return "Lossless JPEG optimization works by removing metadata. Turn on \"Remove metadata\", or use Lossy.";
+                    if (!lossy && _o.Format == "webp" && _image?.BitsPerChannel > 8)
+                        return "This is a 16-bit image; WebP stores 8 bits per channel, so it wouldn't be lossless. Choose PNG or JPEG XL.";
+                    break;
+
+                case CompressionKind.Video when lossy:
+                    if (_o.TargetSizeMb < 0) return "Enter a target size in MB, for example 10 or 24.5.";
+                    if (_o.TargetSizeMb > 0 && _media?.DurationSeconds > 0)
+                    {
+                        int audio = !_media.HasAudio || _o.VideoAudioKbps < 0 ? 0 : _o.VideoAudioKbps > 0 ? _o.VideoAudioKbps : Math.Max(_media.AudioKbps, 96);
+                        int kbps = CompressionService.TargetVideoKbps(_o.TargetSizeMb, _media.DurationSeconds, audio);
+                        int pixels = PixelsAfterScaling();
+                        double perPixel = pixels > 0 ? kbps * 1000.0 / pixels / Math.Max(1, EffectiveFps()) : 1;
+                        if (kbps <= 40 || perPixel < 0.02)
+                            warnings.Add($"{_o.TargetSizeMb:0.#} MB is very tight for {FormatDuration(_media.DurationSeconds)} at this resolution; expect blocky video. Lower the resolution or frame rate, or allow a bigger file.");
+                        double sourceMb = new FileInfo(_path).Length / 1024.0 / 1024.0;
+                        if (_o.TargetSizeMb >= sourceMb) return $"The target ({_o.TargetSizeMb:0.#} MB) isn't smaller than the file ({sourceMb:0.#} MB).";
+                    }
+                    if (_o.Format == "h265") warnings.Add("Some players and browsers can't play H.265; phones, Macs, VLC and smart TVs play it natively.");
+                    if (_o.Format == "av1") warnings.Add("AV1 plays in modern browsers, VLC and recent phones/PCs; older devices may not decode it. Encoding is slower.");
+                    if (_o.UseHardwareEncoder && _o.TargetSizeMb > 0) warnings.Add("GPU encoders use single-pass bitrate control, so the final size may land a little off target.");
+                    break;
+
+                case CompressionKind.Audio when lossy:
+                    if (_media?.AudioKbps > 0 && _o.AudioKbps >= _media.AudioKbps && !CompressionService.IsLosslessAudioSource(_path))
+                        warnings.Add($"The source is already {_media.AudioKbps} kbps; re-encoding at {_o.AudioKbps} kbps won't make it much smaller and loses a little quality.");
+                    break;
+            }
+            return null;
+        }
+
+        private int PixelsAfterScaling()
+        {
+            if (_media == null || _media.Width <= 0) return 0;
+            int w = _media.Width, h = _media.Height;
+            int shortEdge = Math.Min(w, h);
+            if (_o.MaxHeight > 0 && shortEdge > _o.MaxHeight)
+            {
+                double s = (double)_o.MaxHeight / shortEdge;
+                w = (int)(w * s);
+                h = (int)(h * s);
+            }
+            return w * h;
+        }
+
+        private double EffectiveFps() =>
+            _o.MaxFps > 0 && (_media?.Fps ?? 0) > _o.MaxFps ? _o.MaxFps : _media?.Fps > 0 ? _media.Fps : 30;
+
+        private string? HardwareEncoderFor(string codec)
+        {
+            if (codec == "vp9") return null;
+            string prefix = codec switch { "h265" => "hevc", "av1" => "av1", _ => "h264" };
+            return new[] { "_nvenc", "_qsv", "_amf" }.Select(s => prefix + s).FirstOrDefault(_workingHardware.Contains);
+        }
+
+        private static string DescribeHardware(string encoder) =>
+            encoder.EndsWith("_nvenc", StringComparison.Ordinal) ? "NVIDIA NVENC"
+            : encoder.EndsWith("_qsv", StringComparison.Ordinal) ? "Intel Quick Sync"
+            : "AMD AMF";
+
+        private static string FormatImageQuality(int q) => q switch
+        {
+            >= 90 => $"{q}  (near-identical)",
+            >= 75 => $"{q}  (high)",
+            >= 55 => $"{q}  (good)",
+            >= 35 => $"{q}  (small)",
+            _ => $"{q}  (tiny, visible artifacts)"
+        };
+
+        internal static string FormatSize(long bytes) =>
+            bytes < 1024 ? $"{bytes} B"
+            : bytes < 1024 * 1024 ? $"{bytes / 1024.0:0.#} KB"
+            : bytes < 1024L * 1024 * 1024 ? $"{bytes / 1024.0 / 1024.0:0.#} MB"
+            : $"{bytes / 1024.0 / 1024.0 / 1024.0:0.##} GB";
+
+        internal static string FormatDuration(double seconds)
+        {
+            var t = TimeSpan.FromSeconds(seconds);
+            return t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"m\:ss");
+        }
+
+        // ---------- Buttons ----------
+
+        private void OnResetClick(object? sender, RoutedEventArgs e)
+        {
+            _o = CompressionService.Normalize(_kind, _path, CompressionService.Defaults(_kind, _path));
+            _building = true;
+            (_o.Mode == CompressionMode.Lossless ? LosslessCard : LossyCard).IsChecked = true;
+            _building = false;
+            Rebuild();
+        }
+
+        private void OnConfirmClick(object? sender, RoutedEventArgs e)
+        {
+            if (!ConfirmButton.IsEnabled) return;
+            Result = _o.Clone();
+            Finish(true);
+        }
+    }
+}

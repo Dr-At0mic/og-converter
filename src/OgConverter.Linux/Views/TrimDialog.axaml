@@ -1,0 +1,82 @@
+<v:DialogWindow xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:c="using:OgConverter.Controls"
+                xmlns:v="using:OgConverter.Views"
+                x:Class="OgConverter.Views.TrimDialog"
+                Title="Trim video" Width="900" Height="640" MinWidth="640" MinHeight="500"
+                SizeToContent="Manual" CanResize="True">
+
+    <Border Classes="DialogCard">
+        <Grid RowDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+            <!-- Header (drag to move) -->
+            <Grid Classes="DialogHeader" ColumnDefinitions="Auto,*" Margin="24,20,24,14" PointerPressed="OnHeaderPointerPressed">
+                <Border Classes="DialogBadge" Background="{DynamicResource ModeToolsSubtleBrush}">
+                    <TextBlock Text="{c:Icon E8C6}" Classes="Icon" Foreground="{DynamicResource ModeToolsBrush}" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Trim video" Classes="H2" />
+                    <TextBlock x:Name="FileInfoText" Classes="Caption" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Start and end frames -->
+            <Grid Grid.Row="1" Margin="24,0" ColumnDefinitions="*,12,*" RowDefinitions="*,Auto">
+                <Border Background="{DynamicResource WindowBrush}" CornerRadius="8">
+                    <Grid>
+                        <Image x:Name="StartImage" Stretch="Uniform" Margin="8" RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        <TextBlock x:Name="StartStatus" Text="Loading…" Classes="Caption" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <Border Grid.Column="2" Background="{DynamicResource WindowBrush}" CornerRadius="8">
+                    <Grid>
+                        <Image x:Name="EndImage" Stretch="Uniform" Margin="8" RenderOptions.BitmapInterpolationMode="HighQuality" />
+                        <TextBlock x:Name="EndStatus" Text="Loading…" Classes="Caption" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+                <TextBlock Grid.Row="1" Text="First frame kept" Classes="Caption" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="Last frame kept" Classes="Caption" HorizontalAlignment="Center" Margin="0,6,0,0" />
+            </Grid>
+
+            <!-- Timeline -->
+            <StackPanel Grid.Row="2" Margin="14,14,14,0">
+                <c:RangeTimeline x:Name="Timeline" RangeChanged="OnRangeChanged" />
+                <Grid Margin="10,0">
+                    <TextBlock Text="0:00.0" Classes="Caption" FontSize="11" />
+                    <TextBlock x:Name="DurationText" Classes="Caption" FontSize="11" HorizontalAlignment="Right" />
+                </Grid>
+            </StackPanel>
+
+            <!-- Exact times -->
+            <Grid Grid.Row="3" Margin="24,14,24,0" ColumnDefinitions="Auto,120,24,Auto,120,*">
+                <TextBlock Text="Start" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBox x:Name="StartBox" Grid.Column="1" Classes="Mono" LostFocus="OnTimeBoxCommit" KeyDown="OnTimeBoxKeyDown" />
+                <TextBlock Grid.Column="3" Text="End" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBox x:Name="EndBox" Grid.Column="4" Classes="Mono" LostFocus="OnTimeBoxCommit" KeyDown="OnTimeBoxKeyDown" />
+                <TextBlock x:Name="LengthText" Grid.Column="5" HorizontalAlignment="Right" VerticalAlignment="Center"
+                           Classes="Mono" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+            </Grid>
+
+            <!-- Fast mode -->
+            <Grid Grid.Row="4" Margin="24,16,24,0" ColumnDefinitions="*,Auto">
+                <StackPanel>
+                    <TextBlock Text="Fast cut (no re-encoding)" FontWeight="SemiBold" />
+                    <TextBlock Classes="Caption" FontSize="11.5" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Text="Instant and keeps the original quality, but the cut snaps to the nearest keyframe, so the clip may start a little earlier than chosen." />
+                </StackPanel>
+                <CheckBox x:Name="FastCheck" Grid.Column="1" Theme="{StaticResource ToggleSwitch}" VerticalAlignment="Center" Margin="16,0,0,0" />
+            </Grid>
+
+            <!-- Footer -->
+            <Border Grid.Row="5" Classes="DialogFooter" Margin="0,18,0,0">
+                <Grid>
+                    <TextBlock Classes="Caption" VerticalAlignment="Center" FontSize="11.5" Margin="0,0,220,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"
+                               Text="Drag the handles, slide the highlighted part, or type times like 1:05 or 65.5" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Cancel" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
+                        <Button x:Name="ConfirmButton" Theme="{StaticResource AccentButton}" Content="Trim" IsDefault="True" Click="OnConfirmClick" MinWidth="88" IsEnabled="False" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</v:DialogWindow>

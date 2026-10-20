@@ -1,0 +1,107 @@
+<v:DialogWindow xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:c="using:OgConverter.Controls"
+                xmlns:v="using:OgConverter.Views"
+                x:Class="OgConverter.Views.PdfMergeDialog"
+                Title="Merge PDFs" Width="600" Height="520" MinWidth="480" MinHeight="400"
+                SizeToContent="Manual" CanResize="True">
+
+    <Window.Styles>
+        <Style Selector="ListBox#FileList ListBoxItem">
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="ListBox#FileList ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="ListBox#FileList ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
+        </Style>
+        <Style Selector="ListBox#FileList ListBoxItem:selected Border.pip">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+    </Window.Styles>
+
+    <Border Classes="DialogCard">
+        <Grid RowDefinitions="Auto,*,Auto,Auto">
+            <!-- Header (drag to move) -->
+            <Grid Classes="DialogHeader" ColumnDefinitions="Auto,*" Margin="24,22,24,16" PointerPressed="OnHeaderPointerPressed">
+                <Border Classes="DialogBadge" Background="{DynamicResource ModeToolsSubtleBrush}">
+                    <TextBlock Text="{c:Icon E710}" Classes="Icon" Foreground="{DynamicResource ModeToolsBrush}" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Merge PDFs" Classes="H2" />
+                    <TextBlock Text="Pages are combined from top to bottom. Drop more PDFs onto the list to add them."
+                               Classes="Caption" Margin="0,2,0,0" />
+                </StackPanel>
+            </Grid>
+
+            <!-- File list + side buttons -->
+            <Grid Grid.Row="1" Margin="24,0" ColumnDefinitions="*,Auto">
+                <Border Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8">
+                    <ListBox x:Name="FileList" Background="Transparent" BorderThickness="0" Padding="4" DragDrop.AllowDrop="True"
+                             SelectionChanged="OnSelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="v:MergeEntry">
+                                <Grid ColumnDefinitions="28,Auto,*,Auto" ToolTip.Tip="{Binding Path}">
+                                    <Border Classes="pip" Width="3" Height="16" CornerRadius="1.5" Background="{DynamicResource AccentBrush}"
+                                            HorizontalAlignment="Left" Margin="-10,0,0,0" IsVisible="False" />
+                                    <TextBlock Grid.Column="0" Text="{Binding Index}" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{c:Icon E8A5}" Classes="Icon" FontSize="14" Margin="0,0,10,0" />
+                                    <TextBlock Grid.Column="2" Text="{Binding FileName}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="3" Text="{Binding Details}" Foreground="{DynamicResource TextTertiaryBrush}" FontSize="12" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="12,0,0,0" Width="124">
+                    <Button Click="OnAddClick" Margin="0,0,0,6" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{c:Icon E710}" Classes="Icon" FontSize="12" Margin="0,0,8,0" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Add PDFs" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="RemoveButton" Click="OnRemoveClick" Margin="0,0,0,18" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{c:Icon E74D}" Classes="Icon" FontSize="12" Margin="0,0,8,0" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Remove" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="UpButton" Click="OnMoveUpClick" Margin="0,0,0,6" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{c:Icon E74A}" Classes="Icon" FontSize="12" Margin="0,0,8,0" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Move up" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="DownButton" Click="OnMoveDownClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{c:Icon E74B}" Classes="Icon" FontSize="12" Margin="0,0,8,0" Foreground="{DynamicResource TextPrimaryBrush}" />
+                            <TextBlock Text="Move down" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Summary / validation -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="24,14,24,0">
+                <TextBlock x:Name="SummaryIcon" Classes="Icon" FontSize="12" Margin="0,0,8,0" />
+                <TextBlock x:Name="SummaryText" FontSize="12" TextWrapping="Wrap" VerticalAlignment="Center" MaxWidth="500" />
+            </StackPanel>
+
+            <!-- Footer -->
+            <Border Grid.Row="3" Classes="DialogFooter" Margin="0,18,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Cancel" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
+                    <Button x:Name="MergeButton" Theme="{StaticResource AccentButton}" Content="Merge" IsDefault="True" Click="OnMergeClick" MinWidth="88" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</v:DialogWindow>

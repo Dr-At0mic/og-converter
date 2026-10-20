@@ -48,6 +48,11 @@ namespace OgConverter
                 return Wheel.WheelSnapshot.Run(args.Length > 1 ? args[1] : "wheel-snapshots");
             }
 
+            if (args.Length > 1 && args[0] == "--snapshot")
+            {
+                return Tests.SnapshotRunner.Run(args[1]);
+            }
+
             // One app per session: a second launch hands "--wheel <file>" or "come forward" to the running one and exits
             if (Services.DBusService.ClaimOrForward(args)) return 0;
 
