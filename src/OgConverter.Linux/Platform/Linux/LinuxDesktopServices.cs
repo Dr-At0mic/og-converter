@@ -35,33 +35,48 @@ namespace OgConverter.Platform.Linux
             CopyToClipboard(png.ToArray(), "image/png");
         }
 
+        /// <summary>
+        /// wl-copy on Wayland, else (or when it can't get the clipboard, e.g. while the screen is locked) xclip through
+        /// XWayland, whose clipboard GNOME and KDE share with Wayland apps.
+        /// </summary>
         private static void CopyToClipboard(byte[] data, string? mimeType)
         {
-            string? wlCopy = Services.Platform.FindOnPath("wl-copy");
-            string? xclip = Services.Platform.FindOnPath("xclip");
-            string tool;
-            string[] args;
-            if (IsWayland && wlCopy != null)
+            string? wlCopy = IsWayland ? Services.Platform.FindOnPath("wl-copy") : null;
+            string? xclip = Env("DISPLAY") != null ? Services.Platform.FindOnPath("xclip") : null;
+            if (wlCopy == null && xclip == null)
             {
-                tool = wlCopy;
-                args = mimeType == null ? Array.Empty<string>() : new[] { "--type", mimeType };
-            }
-            else if (Env("DISPLAY") != null && xclip != null)
-            {
-                tool = xclip;
-                args = mimeType == null ? new[] { "-selection", "clipboard" } : new[] { "-selection", "clipboard", "-t", mimeType };
-            }
-            else if (Env("DISPLAY") == null && Env("WAYLAND_DISPLAY") == null)
-            {
-                throw new InvalidOperationException("There's no desktop session to copy to.");
-            }
-            else
-            {
+                if (Env("DISPLAY") == null && Env("WAYLAND_DISPLAY") == null) throw new InvalidOperationException("There's no desktop session to copy to.");
                 throw new InvalidOperationException("Copying to the clipboard needs " + (IsWayland
                     ? $"wl-clipboard ({InstallHints.Command("wl-clipboard")})."
                     : $"xclip ({InstallHints.Command("xclip")})."));
             }
 
+            InvalidOperationException? failed = null;
+            if (wlCopy != null)
+            {
+                try
+                {
+                    Copy(wlCopy, mimeType == null ? Array.Empty<string>() : new[] { "--type", mimeType }, data, xclip != null ? 5_000 : 10_000);
+                    return;
+                }
+                catch (InvalidOperationException ex) when (xclip != null)
+                {
+                    failed = ex;
+                }
+            }
+            try
+            {
+                Copy(xclip!, mimeType == null ? new[] { "-selection", "clipboard" } : new[] { "-selection", "clipboard", "-t", mimeType }, data, 10_000);
+            }
+            catch (InvalidOperationException) when (failed != null)
+            {
+                throw failed;
+            }
+        }
+
+        /// <summary>Hands <paramref name="data"/> to a clipboard tool, which then serves it from the background.</summary>
+        private static void Copy(string tool, string[] args, byte[] data, int timeoutMs)
+        {
             // Both tools stay in the background to serve the clipboard: wait for the foreground part only, and keep their
             // output away from ours (a background copy holding our stdout open would keep a pipe or terminal waiting)
             var psi = new ProcessStartInfo(tool)
@@ -78,7 +93,12 @@ namespace OgConverter.Platform.Linux
             var errors = p.StandardError.ReadLineAsync();
             p.StandardInput.BaseStream.Write(data);
             p.StandardInput.Close();
-            if (!p.WaitForExit(10_000)) throw new InvalidOperationException($"{Path.GetFileName(tool)} didn't finish copying.");
+            if (!p.WaitForExit(timeoutMs))
+            {
+                // wl-copy waits forever when the compositor won't hand it the clipboard
+                try { p.Kill(); } catch (InvalidOperationException) { }
+                throw new InvalidOperationException($"{Path.GetFileName(tool)} didn't finish copying.");
+            }
             if (p.ExitCode != 0)
             {
                 string why = errors.Wait(500) ? errors.Result?.Trim() ?? "" : "";
