@@ -122,8 +122,9 @@ source:
 - `global.get_pointer()` returns `[x, y, mods]`. The mask did contain the
   modifier during the drag, so polling caught the Shift tap.
 - `global.backend.get_dnd()` (Meta.Dnd) emits `dnd-enter` / `dnd-leave` when a
-  Wayland client calls `start_drag`. The extension uses `dnd-enter` only to
-  switch to fast polling immediately.
+  Wayland client calls `start_drag`. The extension uses `dnd-enter` to switch
+  to fast polling immediately, and to know when the drag has really started
+  (see below).
 
 The extension therefore detects the gesture like this:
 
@@ -136,6 +137,23 @@ The extension therefore detects the gesture like this:
 
 A press and release shorter than 100 ms can be missed. That doesn't matter,
 because a file drag always lasts longer.
+
+### A key tapped before the drag starts
+
+Pressing a file and tapping the key without moving the mouse is not a drag
+yet: Files only starts one when the pointer moves past GTK's drag threshold
+(8 px by default). Until then there is no drag data, so a wheel opened right
+away would be empty, and it filled in only once the user moved the mouse
+(version 2 and earlier). The one-pixel `NudgePointer` doesn't help here,
+because it stays below the threshold.
+
+Since version 3 such a tap waits: `KeyTapped` is sent when `dnd-enter` says
+the drag has started, at the pointer's position then. If the key was already
+let go, `KeyReleased` follows right after, as if the tap had happened then.
+If the button goes up without a drag, nothing is sent. In case a drag source
+never makes mutter emit `dnd-enter`, the tap is also sent once the pointer
+has moved 24 px from where the button went down. Without `Meta.Dnd`, taps are
+sent at once, as before.
 
 ### Do we need `MoveWindowByTitle`?
 

@@ -63,6 +63,14 @@ const NUDGE_BACK_MS = 30;
 const IDLE_POLL_MS = 100;  // only looks at BUTTON1_MASK
 const FAST_POLL_MS = 20;   // while button 1 is held
 
+// A key tapped while the button is held but before the drag has started (the
+// pointer hasn't moved past the toolkit's drag threshold yet) waits for
+// 'dnd-enter': until then there's no drag, so the wheel couldn't learn the
+// file. In case the drag source never makes mutter emit 'dnd-enter', it is
+// also sent once the pointer has moved this far (logical pixels) from where
+// the button went down, beyond any toolkit's drag threshold.
+const DRAG_FALLBACK_PX = 24;
+
 // Only run detection while the app owns its bus name. Set to false to make
 // the extension always poll (e.g. to test the gesture with debug logging).
 const REQUIRE_APP_ON_BUS = true;
@@ -120,6 +128,9 @@ class DragTapDetector {
         this._down = new Set();      // keys down at the last poll
         this._tapped = new Set();    // keys we sent KeyTapped for and not yet released
         this._anyTap = false;        // at least one KeyTapped during this press
+        this._pending = new Map();   // key -> released since: tapped before the drag started, not sent yet
+        this._downX = 0;             // where button 1 went down
+        this._downY = 0;
     }
 
     start() {
@@ -201,6 +212,8 @@ class DragTapDetector {
             // Button just went down. Keys already held now (e.g. Shift-click
             // to extend a selection) must not trigger.
             this._held = true;
+            this._downX = x;
+            this._downY = y;
             this._ignored = keysDown(mods);
             this._down = new Set(this._ignored);
             this._debug(`button1 down at ${x},${y}; ignoring [${[...this._ignored]}]`);
@@ -224,19 +237,47 @@ class DragTapDetector {
             const is = now.has(name);
             if (is && !was) {
                 if (!this._ignored.has(name)) {
-                    this._tapped.add(name);
-                    this._anyTap = true;
-                    this._onKeyTapped(name, x, y);
+                    if (this._dnd && !this._dndActive) {
+                        // Pressed but not dragging yet: wait for the drag
+                        this._pending.set(name, false);
+                        this._debug(`${name} tapped before the drag started; waiting`);
+                    } else {
+                        this._tapped.add(name);
+                        this._anyTap = true;
+                        this._onKeyTapped(name, x, y);
+                    }
                 }
             } else if (!is && was) {
                 // A key that was down at press time becomes eligible once
                 // released, so release + press again during the drag works.
                 this._ignored.delete(name);
-                if (this._tapped.delete(name))
+                if (this._pending.has(name))
+                    this._pending.set(name, true);
+                else if (this._tapped.delete(name))
                     this._onKeyReleased(name);
             }
         }
         this._down = now;
+
+        if (this._pending.size > 0 &&
+            (this._dndActive || Math.hypot(x - this._downX, y - this._downY) >= DRAG_FALLBACK_PX))
+            this._sendPending(x, y);
+    }
+
+    // The drag has started: send the taps that were waiting for it, at the
+    // pointer's position now. A key already let go is released right after,
+    // as if the whole tap had happened now.
+    _sendPending(x, y) {
+        this._debug(`drag started (dnd=${this._dndActive}); sending [${[...this._pending.keys()]}]`);
+        for (const [name, released] of this._pending) {
+            this._anyTap = true;
+            this._onKeyTapped(name, x, y);
+            if (released)
+                this._onKeyReleased(name);
+            else
+                this._tapped.add(name);
+        }
+        this._pending.clear();
     }
 }
 
