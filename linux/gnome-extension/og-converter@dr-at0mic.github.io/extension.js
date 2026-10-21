@@ -71,6 +71,12 @@ const FAST_POLL_MS = 20;   // while button 1 is held
 // the button went down, beyond any toolkit's drag threshold.
 const DRAG_FALLBACK_PX = 24;
 
+// To get that drag going without the user moving the mouse (as on Windows,
+// where press + tap opens a full wheel straight away), the pointer moves this
+// far and back: past GTK's drag threshold (8 px by default), below the
+// fallback above.
+const START_DRAG_PX = 16;
+
 // Only run detection while the app owns its bus name. Set to false to make
 // the extension always poll (e.g. to test the gesture with debug logging).
 const REQUIRE_APP_ON_BUS = true;
@@ -107,10 +113,11 @@ function isNoOwnerError(e) {
  * Watches the seat for "button 1 held + modifier tapped" and reports edges.
  */
 class DragTapDetector {
-    constructor({onKeyTapped, onKeyReleased, onButtonReleased, debug}) {
+    constructor({onKeyTapped, onKeyReleased, onButtonReleased, onStartDrag, debug}) {
         this._onKeyTapped = onKeyTapped;
         this._onKeyReleased = onKeyReleased;
         this._onButtonReleased = onButtonReleased;
+        this._onStartDrag = onStartDrag;
         this._debug = debug;
 
         this._timerId = 0;
@@ -238,9 +245,12 @@ class DragTapDetector {
             if (is && !was) {
                 if (!this._ignored.has(name)) {
                     if (this._dnd && !this._dndActive) {
-                        // Pressed but not dragging yet: wait for the drag
+                        // Pressed but not dragging yet: start the drag, and wait for it
+                        const first = this._pending.size === 0;
                         this._pending.set(name, false);
                         this._debug(`${name} tapped before the drag started; waiting`);
+                        if (first)
+                            this._onStartDrag();
                     } else {
                         this._tapped.add(name);
                         this._anyTap = true;
@@ -287,6 +297,7 @@ export default class OgConverterExtension extends Extension {
         this._appPresent = false;
         this._stageEventId = 0;
         this._nudgeId = 0;
+        this._nudgeDx = 0;
         this._virtualPointer = null;
 
         this._detector = new DragTapDetector({
@@ -301,6 +312,10 @@ export default class OgConverterExtension extends Extension {
             onButtonReleased: (x, y) => {
                 this._log(`ButtonReleased(${x}, ${y})`);
                 this._callApp('ButtonReleased', new GLib.Variant('(ii)', [x, y]));
+            },
+            onStartDrag: () => {
+                this._log('StartDrag');
+                this._movePointerBriefly(START_DRAG_PX);
             },
             debug: msg => this._log(msg),
         });
@@ -420,19 +435,29 @@ export default class OgConverterExtension extends Extension {
     // The wheel opens under a still pointer, so it can't see the dragged file
     // until the user moves the mouse; one pixel out and back fixes that.
     NudgePointer() {
+        this._movePointerBriefly(1);
+        this._log('NudgePointer');
+    }
+
+    // Moves the pointer dx logical pixels right and, NUDGE_BACK_MS later,
+    // back (virtual pointer device on the default seat).
+    _movePointerBriefly(dx) {
         if (!this._virtualPointer) {
             const seat = Clutter.get_default_backend().get_default_seat();
             this._virtualPointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
         }
-        this._virtualPointer.notify_relative_motion(GLib.get_monotonic_time(), 1, 0);
-        if (this._nudgeId)
+        if (this._nudgeId) {
+            // A move still waiting to go back: take it back first
             GLib.Source.remove(this._nudgeId);
+            this._virtualPointer.notify_relative_motion(GLib.get_monotonic_time(), -this._nudgeDx, 0);
+        }
+        this._nudgeDx = dx;
+        this._virtualPointer.notify_relative_motion(GLib.get_monotonic_time(), dx, 0);
         this._nudgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, NUDGE_BACK_MS, () => {
             this._nudgeId = 0;
-            this._virtualPointer?.notify_relative_motion(GLib.get_monotonic_time(), -1, 0);
+            this._virtualPointer?.notify_relative_motion(GLib.get_monotonic_time(), -dx, 0);
             return GLib.SOURCE_REMOVE;
         });
-        this._log('NudgePointer');
     }
 
     SetDebug(enabled) {

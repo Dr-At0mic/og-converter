@@ -147,8 +147,12 @@ away would be empty, and it filled in only once the user moved the mouse
 (version 2 and earlier). The one-pixel `NudgePointer` doesn't help here,
 because it stays below the threshold.
 
-Since version 3 such a tap waits: `KeyTapped` is sent when `dnd-enter` says
-the drag has started, at the pointer's position then. If the key was already
+Since version 3 the extension starts the drag itself, so press + tap opens a
+full wheel straight away, as on Windows: the pointer moves 16 px right and,
+30 ms later, back (virtual pointer device), which is past GTK's threshold.
+The tap waits meanwhile: `KeyTapped` is sent when `dnd-enter` says the drag
+has started, at the pointer's position then. Pressed on empty space, the same
+move only starts (and ends) a tiny rubber-band selection. If the key was already
 let go, `KeyReleased` follows right after, as if the tap had happened then.
 If the button goes up without a drag, nothing is sent. In case a drag source
 never makes mutter emit `dnd-enter`, the tap is also sent once the pointer

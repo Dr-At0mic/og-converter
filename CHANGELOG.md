@@ -16,7 +16,7 @@ Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fail
   1,000,000 bytes, so the file is under it however a site counts megabytes. If a file can't get that small, the smallest result is
   kept and marked "Smallest possible, over target".
 - **Linux, GNOME**: pressing a file and tapping the key before moving the mouse no longer opens an empty wheel that only filled in
-  once the mouse moved. The wheel now opens as soon as the drag starts. This needs the updated helper extension (version 3):
+  once the mouse moved. As on Windows, the full wheel opens straight away. This needs the updated helper extension (version 3):
   Settings › Desktop integration offers the update, then log out and back in once.
 
 ## [1.5.0]
