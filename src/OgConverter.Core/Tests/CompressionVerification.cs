@@ -44,6 +44,19 @@ namespace OgConverter.Tests
                 return job.TargetPath;
             }
 
+            // Target size: under the limit, and (minShare) close enough to it that the quality wasn't given away
+            async Task<string> RunToSize(string path, CompressionOptions o, string label, double minShare = 0)
+            {
+                var sw = Stopwatch.StartNew();
+                var job = await engine.ExecuteAsync(path, Compress, settings, new ToolParameters { Compression = o });
+                long limit = CompressionService.TargetBytes(o.TargetSizeMb);
+                Console.WriteLine($"     {label,-44} {(job.IsSuccess ? "OK " : "-- ")} {Path.GetFileName(job.TargetPath),-36} {job.ConvertedSizeBytes,9:N0} of {limit,9:N0} bytes {sw.ElapsedMilliseconds,6} ms {job.ErrorMessage}");
+                if (!job.IsSuccess) throw new Exception($"Compress {label} failed: {job.ErrorMessage}");
+                if (job.ConvertedSizeBytes > limit || job.TargetFormat != "Compressed") throw new Exception($"{label}: {job.ConvertedSizeBytes} bytes, target {limit} ({job.TargetFormat})");
+                if (job.ConvertedSizeBytes < limit * minShare) throw new Exception($"{label}: {job.ConvertedSizeBytes} bytes uses less than {minShare:P0} of the {limit}-byte target");
+                return job.TargetPath;
+            }
+
             // ---------- Wheel ----------
             foreach (var (name, expect) in new[] { ("a.png", true), ("a.mp4", true), ("a.flac", true), ("a.pdf", true), ("a.docx", true), ("a.pptx", true),
                                                    ("a.xlsx", true), ("a.csv", true), ("a.zip", true), ("a.svg", true), ("a.gif", true), ("a.bin", true),
@@ -78,6 +91,17 @@ namespace OgConverter.Tests
                     var info = await MediaToolkit.ProbeAsync(ffmpeg, outPath);
                     if (Math.Max(info.Width, info.Height) != 800) throw new Exception($"{fmt}: expected longest edge 800, got {info.Width}x{info.Height}");
                 }
+            }
+
+            // Target size: the best quality that fits at full size; smaller only when even a low quality doesn't fit
+            string sizedJpg = await RunToSize(photoPng, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "jpg", TargetSizeMb = 0.4 }, "PNG → JPEG under 0.4 MB", minShare: 0.6);
+            if (Decode(sizedJpg).Width != 1600) throw new Exception("JPEG under 0.4 MB should keep its full size");
+            string tinyJpg = await RunToSize(photoPng, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "jpg", TargetSizeMb = 0.04 }, "PNG → JPEG under 40 KB (resized)", minShare: 0.4);
+            if (Decode(tinyJpg).Width >= 1600) throw new Exception("JPEG under 40 KB should have been made smaller");
+            if (ffmpeg != null)
+            {
+                await RunToSize(photoPng, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "keep", TargetSizeMb = 0.8 }, "PNG palette under 0.8 MB");
+                await RunToSize(photoPng, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "webp", TargetSizeMb = 0.15 }, "PNG → WebP under 150 KB", minShare: 0.5);
             }
 
             // Transparency: palette PNG must not ruin soft edges; JPEG must flatten onto white, not black
@@ -128,6 +152,7 @@ namespace OgConverter.Tests
                 await Run(gif, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "gif", Quality = 40, MaxFps = 15, MaxDimension = 320 }, "GIF lossy (fewer colors, 15 fps, 320 px)");
                 await Run(gif, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "webp", Quality = 70 }, "GIF lossy → animated WebP");
                 await Run(gif, new CompressionOptions { Mode = CompressionMode.Lossless, Format = "webp" }, "GIF lossless → animated WebP", mayRefuse: true);
+                await RunToSize(gif, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "gif", TargetSizeMb = new FileInfo(gif).Length / 3.0 / 1_000_000 }, "GIF under a third of its size");
             }
 
             // ---------- SVG ----------
@@ -207,6 +232,8 @@ namespace OgConverter.Tests
                 string voice = (await Run(wav, new CompressionOptions { Mode = CompressionMode.Lossy, Format = "aac", AudioKbps = 48, Mono = true, SampleRate = 22050 }, "WAV lossy → AAC 48 kbps mono 22 kHz"))!;
                 var vinfo = await MediaToolkit.ProbeAsync(ffmpeg, voice);
                 if (vinfo.AudioChannels != 1) throw new Exception("Mono option ignored");
+                foreach (string fmt in new[] { "mp3", "aac", "opus" })
+                    await RunToSize(wav, new CompressionOptions { Mode = CompressionMode.Lossy, Format = fmt, TargetSizeMb = 0.1 }, $"WAV → {fmt.ToUpperInvariant()} under 100 KB", minShare: 0.5);
 
                 string mp3 = Path.Combine(dir, "track.mp3");
                 await MediaToolkit.RunAsync(ffmpeg, new[] { "-f", "lavfi", "-i", "sine=d=8", "-f", "lavfi", "-i", "color=red:s=600x600:d=1", "-map", "0:a", "-map", "1:v", "-frames:v", "1",
@@ -250,6 +277,10 @@ namespace OgConverter.Tests
             {
                 if (!string.IsNullOrEmpty(check.Info.Author)) throw new Exception("PDF metadata not removed");
             }
+            // Between the 150 dpi and 72 dpi results: the search has to find a resolution and quality in between
+            double pdfTargetMb = (new FileInfo(pdfScreen).Length + new FileInfo(pdfEbook).Length) / 2.0 / 1_000_000;
+            string pdfSized = await RunToSize(pdf, new CompressionOptions { Mode = CompressionMode.Lossy, TargetSizeMb = pdfTargetMb }, $"PDF under {pdfTargetMb * 1000:0} KB");
+            if (PdfToolsService.GetPageCount(pdfSized) != 2 || !PdfToolsService.ExtractText(pdfSized).Contains("Hello compressed world")) throw new Exception("Target-size PDF lost pages or text");
 
             // ---------- Office ----------
             string docx = Path.Combine(dir, "report.docx");
@@ -270,6 +301,8 @@ namespace OgConverter.Tests
                 if (core.Contains("Jane Doe")) throw new Exception("DOCX author not removed");
             }
             await Run(docx, new CompressionOptions { Mode = CompressionMode.Lossless, StripMetadata = false }, "DOCX lossless", mayRefuse: true);
+            double docxTargetMb = new FileInfo(docxSmall).Length * 1.2 / 1_000_000;
+            await RunToSize(docx, new CompressionOptions { Mode = CompressionMode.Lossy, TargetSizeMb = docxTargetMb }, $"DOCX under {docxTargetMb * 1000:0} KB");
 
             string odt = Path.Combine(dir, "letter.odt");
             CreateOdt(odt, bigJpg);

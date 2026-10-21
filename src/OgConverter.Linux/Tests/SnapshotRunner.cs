@@ -131,12 +131,15 @@ namespace OgConverter.Tests
             string log = Path.Combine(outDir, "server.log");
             File.WriteAllText(log, "log");
 
-            void SnapCompress(string file, string name, Action<CompressDialog>? setup = null)
+            void SnapCompress(string file, string name, Action<CompressDialog>? setup = null, CompressionOptions? initial = null)
             {
                 if (!File.Exists(file)) return;
-                Snap(() => new CompressDialog(file, null, ffmpeg), $"dialog_compress_{name}.png", setup, wait: TimeSpan.FromSeconds(4));
+                Snap(() => new CompressDialog(file, initial, ffmpeg), $"dialog_compress_{name}.png", setup, wait: TimeSpan.FromSeconds(4));
             }
             SnapCompress(png, "image_lossy");
+            if (File.Exists(png))
+                SnapCompress(png, "image_target", initial: new CompressionOptions { Mode = CompressionMode.Lossy, Format = "jpg", TargetSizeMb = new FileInfo(png).Length / 2.0 / 1_000_000 });
+            SnapCompress(wav, "audio_target", initial: new CompressionOptions { Mode = CompressionMode.Lossy, Format = "mp3", TargetSizeMb = 0.05 });
             SnapCompress(png, "image_lossless", d => d.LosslessCard.IsChecked = true);
             SnapCompress(mp4, "video_lossy");
             SnapCompress(mp4, "video_target", d => ClickChip(d, "Discord · 10 MB"));

@@ -406,7 +406,8 @@ namespace OgConverter.Services
             {
                 job.TargetFormat = "Compressed";
                 job.TargetPath = await CompressionService.CompressAsync(job.SourcePath, job.Parameters?.Compression, _ffmpegPath,
-                    (ext, suffix) => GetTargetFilePath(job.SourcePath, ext, settings, suffix), progress);
+                    (ext, suffix) => GetTargetFilePath(job.SourcePath, ext, settings, suffix), progress,
+                    targetMissed: () => job.TargetFormat = "Smallest possible, over target");
                 return;
             }
 

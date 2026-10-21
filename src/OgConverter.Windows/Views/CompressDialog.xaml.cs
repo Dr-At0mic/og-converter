@@ -191,11 +191,12 @@ namespace OgConverter.Views
         {
             if (lossy)
             {
-                Preset("Max quality", o => o.Quality = 90, o => o.Quality == 90);
-                Preset("High", o => o.Quality = 80, o => o.Quality == 80);
-                Preset("Balanced", o => o.Quality = 70, o => o.Quality == 70);
-                Preset("Small", o => o.Quality = 55, o => o.Quality == 55);
-                Preset("Tiny", o => o.Quality = 40, o => o.Quality == 40);
+                Preset("Max quality", o => { o.Quality = 90; o.TargetSizeMb = 0; }, o => o.Quality == 90 && o.TargetSizeMb == 0);
+                Preset("High", o => { o.Quality = 80; o.TargetSizeMb = 0; }, o => o.Quality == 80 && o.TargetSizeMb == 0);
+                Preset("Balanced", o => { o.Quality = 70; o.TargetSizeMb = 0; }, o => o.Quality == 70 && o.TargetSizeMb == 0);
+                Preset("Small", o => { o.Quality = 55; o.TargetSizeMb = 0; }, o => o.Quality == 55 && o.TargetSizeMb == 0);
+                Preset("Tiny", o => { o.Quality = 40; o.TargetSizeMb = 0; }, o => o.Quality == 40 && o.TargetSizeMb == 0);
+                if (_o.Format != "guetzli") SizePresets();
             }
 
             FormatCombo("Format");
@@ -203,8 +204,10 @@ namespace OgConverter.Views
             if (lossy)
             {
                 bool palette = _o.Format == "keep" && _ext == "png";
-                QualitySlider(palette ? "Colors" : "Quality", q => palette ? $"{CompressionService.PaletteColors(q)} colors" : FormatImageQuality(q));
+                bool bySize = _o.Format != "guetzli" && SizeControl(palette ? "Colors" : "Quality");
+                if (!bySize) QualitySlider(palette ? "Colors" : "Quality", q => palette ? $"{CompressionService.PaletteColors(q)} colors" : FormatImageQuality(q));
                 ResizeCombo(_image?.Bitmap is { } b ? Math.Max(b.Width, b.Height) : 0);
+                if (bySize) Note("Tries qualities from the best down and keeps the best one that fits. The picture is made smaller only when even a low quality doesn't fit.");
             }
             if (_o.Format == "guetzli" && GuetzliService.IsAvailable && lossy && GuetzliMegapixels() is { } megapixels)
             {
@@ -232,7 +235,8 @@ namespace OgConverter.Views
             FormatCombo("Output");
             if (lossy)
             {
-                QualitySlider(_o.Format == "gif" ? "Colors" : "Quality", q => _o.Format == "gif" ? $"{CompressionService.PaletteColors(q)} colors" : FormatImageQuality(q));
+                if (!SizeControl(_o.Format == "gif" ? "Colors" : "Quality"))
+                    QualitySlider(_o.Format == "gif" ? "Colors" : "Quality", q => _o.Format == "gif" ? $"{CompressionService.PaletteColors(q)} colors" : FormatImageQuality(q));
                 ResizeCombo(0);
                 Combo("Frame rate", new (object, string)[] { (0, "Original"), (30, "30 fps"), (24, "24 fps"), (20, "20 fps"), (15, "15 fps"), (10, "10 fps") },
                     _o.MaxFps, v => _o.MaxFps = (int)v);
@@ -269,37 +273,7 @@ namespace OgConverter.Views
             FormatCombo("Codec");
 
             // Rate control: quality (constant quality) or a target file size (two-pass where the encoder supports it)
-            Label("Size control");
-            var rateRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
-            var byQuality = new RadioButton { Content = "Constant quality", GroupName = "Rate", IsChecked = _o.TargetSizeMb <= 0, Margin = new Thickness(0, 0, 18, 0) };
-            var bySize = new RadioButton { Content = "Target file size", GroupName = "Rate", IsChecked = _o.TargetSizeMb > 0 };
-            byQuality.Checked += (_, _) => { if (_building) return; _o.TargetSizeMb = 0; Rebuild(); };
-            bySize.Checked += (_, _) =>
-            {
-                if (_building) return;
-                double current = new FileInfo(_path).Length / 1024.0 / 1024.0;
-                _o.TargetSizeMb = Math.Max(1, Math.Round(current / 2));
-                Rebuild();
-            };
-            rateRow.Children.Add(byQuality);
-            rateRow.Children.Add(bySize);
-            SettingsPanel.Children.Add(rateRow);
-
-            if (_o.TargetSizeMb > 0)
-            {
-                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
-                var box = new TextBox { Width = 90, Text = _o.TargetSizeMb.ToString("0.##", CultureInfo.CurrentCulture) };
-                box.TextChanged += (_, _) =>
-                {
-                    if (_building) return;
-                    _o.TargetSizeMb = double.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out double mb) && mb > 0 ? mb : -1;
-                    Refresh();
-                };
-                row.Children.Add(box);
-                row.Children.Add(new TextBlock { Text = "MB", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Foreground = (Brush)FindResource("TextSecondaryBrush") });
-                SettingsPanel.Children.Add(row);
-            }
-            else
+            if (!SizeControl("Constant quality"))
             {
                 QualitySlider("Quality", q => _o.Format switch
                 {
@@ -363,20 +337,23 @@ namespace OgConverter.Views
             {
                 var l = levels[i];
                 bool mono = i >= 3;
-                Preset(names[i], o => { o.AudioKbps = Pick(o.Format, l); o.Mono = mono; }, o => o.AudioKbps == Pick(o.Format, l) && o.Mono == mono);
+                Preset(names[i], o => { o.AudioKbps = Pick(o.Format, l); o.Mono = mono; o.TargetSizeMb = 0; }, o => o.AudioKbps == Pick(o.Format, l) && o.Mono == mono && o.TargetSizeMb == 0);
             }
 
             FormatCombo("Codec");
-            var bitrates = (_o.Format == "opus" ? new[] { 256, 192, 160, 128, 112, 96, 80, 64, 48, 32, 24 }
-                          : _o.Format == "mp3" ? new[] { 245, 225, 190, 175, 165, 130, 115, 100, 85, 65 }
-                          : new[] { 320, 256, 192, 160, 128, 112, 96, 80, 64, 48 })
-                .Select(k => ((object)k, _o.Format == "mp3" ? $"≈{k} kbps (V{CompressionService.LameVbrLevel(k)})" : $"{k} kbps")).ToList();
-            if (!bitrates.Any(b => (int)b.Item1 == _o.AudioKbps))
+            if (!SizeControl("Bitrate"))
             {
-                int nearest = bitrates.Select(b => (int)b.Item1).OrderBy(k => Math.Abs(k - _o.AudioKbps)).First();
-                _o.AudioKbps = nearest;
+                var bitrates = (_o.Format == "opus" ? new[] { 256, 192, 160, 128, 112, 96, 80, 64, 48, 32, 24 }
+                              : _o.Format == "mp3" ? new[] { 245, 225, 190, 175, 165, 130, 115, 100, 85, 65 }
+                              : new[] { 320, 256, 192, 160, 128, 112, 96, 80, 64, 48 })
+                    .Select(k => ((object)k, _o.Format == "mp3" ? $"≈{k} kbps (V{CompressionService.LameVbrLevel(k)})" : $"{k} kbps")).ToList();
+                if (!bitrates.Any(b => (int)b.Item1 == _o.AudioKbps))
+                {
+                    int nearest = bitrates.Select(b => (int)b.Item1).OrderBy(k => Math.Abs(k - _o.AudioKbps)).First();
+                    _o.AudioKbps = nearest;
+                }
+                Combo("Bitrate", bitrates, _o.AudioKbps, v => _o.AudioKbps = (int)v);
             }
-            Combo("Bitrate", bitrates, _o.AudioKbps, v => _o.AudioKbps = (int)v);
             Combo("Channels", new (object, string)[] { (false, "Keep original"), (true, "Mono (half the data, fine for speech)") }, _o.Mono, v => _o.Mono = (bool)v);
             if (_o.Format != "opus")
             {
@@ -397,17 +374,21 @@ namespace OgConverter.Views
                 return;
             }
 
-            Preset("Screen · 72 dpi", o => { o.PdfDpi = 72; o.Quality = 60; }, o => o.PdfDpi == 72 && o.Quality == 60);
-            Preset("eBook · 150 dpi", o => { o.PdfDpi = 150; o.Quality = 75; }, o => o.PdfDpi == 150 && o.Quality == 75);
-            Preset("Print · 300 dpi", o => { o.PdfDpi = 300; o.Quality = 85; }, o => o.PdfDpi == 300 && o.Quality == 85);
-            Preset("Archive · 300 dpi", o => { o.PdfDpi = 300; o.Quality = 92; }, o => o.PdfDpi == 300 && o.Quality == 92);
+            Preset("Screen · 72 dpi", o => { o.PdfDpi = 72; o.Quality = 60; o.TargetSizeMb = 0; }, o => o.PdfDpi == 72 && o.Quality == 60 && o.TargetSizeMb == 0);
+            Preset("eBook · 150 dpi", o => { o.PdfDpi = 150; o.Quality = 75; o.TargetSizeMb = 0; }, o => o.PdfDpi == 150 && o.Quality == 75 && o.TargetSizeMb == 0);
+            Preset("Print · 300 dpi", o => { o.PdfDpi = 300; o.Quality = 85; o.TargetSizeMb = 0; }, o => o.PdfDpi == 300 && o.Quality == 85 && o.TargetSizeMb == 0);
+            Preset("Archive · 300 dpi", o => { o.PdfDpi = 300; o.Quality = 92; o.TargetSizeMb = 0; }, o => o.PdfDpi == 300 && o.Quality == 92 && o.TargetSizeMb == 0);
+            SizePresets();
 
-            Combo("Image resolution", new (object, string)[]
+            if (!SizeControl("Resolution and quality"))
             {
-                (72, "72 dpi (screen, smallest)"), (96, "96 dpi"), (120, "120 dpi"), (150, "150 dpi (ebook, readable when zoomed)"),
-                (200, "200 dpi"), (300, "300 dpi (print)")
-            }, _o.PdfDpi, v => _o.PdfDpi = (int)v);
-            QualitySlider("JPEG quality", FormatImageQuality);
+                Combo("Image resolution", new (object, string)[]
+                {
+                    (72, "72 dpi (screen, smallest)"), (96, "96 dpi"), (120, "120 dpi"), (150, "150 dpi (ebook, readable when zoomed)"),
+                    (200, "200 dpi"), (300, "300 dpi (print)")
+                }, _o.PdfDpi, v => _o.PdfDpi = (int)v);
+                QualitySlider("JPEG quality", FormatImageQuality);
+            }
             Check("Convert images to grayscale", _o.Grayscale, v => _o.Grayscale = v);
             Check("Remove metadata (author, title, creator app)", _o.StripMetadata, v => _o.StripMetadata = v);
             Note("Text and vector graphics stay sharp; only photos and scans are resampled. Masks and special color spaces are left untouched.");
@@ -417,17 +398,21 @@ namespace OgConverter.Views
         {
             if (lossy)
             {
-                Preset("Email · 96 ppi", o => { o.MaxDimension = 1280; o.Quality = 70; }, o => o.MaxDimension == 1280 && o.Quality == 70);
-                Preset("Web · 150 ppi", o => { o.MaxDimension = 1920; o.Quality = 80; }, o => o.MaxDimension == 1920 && o.Quality == 80);
-                Preset("Print · 220 ppi", o => { o.MaxDimension = 2800; o.Quality = 85; }, o => o.MaxDimension == 2800 && o.Quality == 85);
-                Preset("HD · 330 ppi", o => { o.MaxDimension = 4000; o.Quality = 90; }, o => o.MaxDimension == 4000 && o.Quality == 90);
+                Preset("Email · 96 ppi", o => { o.MaxDimension = 1280; o.Quality = 70; o.TargetSizeMb = 0; }, o => o.MaxDimension == 1280 && o.Quality == 70 && o.TargetSizeMb == 0);
+                Preset("Web · 150 ppi", o => { o.MaxDimension = 1920; o.Quality = 80; o.TargetSizeMb = 0; }, o => o.MaxDimension == 1920 && o.Quality == 80 && o.TargetSizeMb == 0);
+                Preset("Print · 220 ppi", o => { o.MaxDimension = 2800; o.Quality = 85; o.TargetSizeMb = 0; }, o => o.MaxDimension == 2800 && o.Quality == 85 && o.TargetSizeMb == 0);
+                Preset("HD · 330 ppi", o => { o.MaxDimension = 4000; o.Quality = 90; o.TargetSizeMb = 0; }, o => o.MaxDimension == 4000 && o.Quality == 90 && o.TargetSizeMb == 0);
+                SizePresets();
 
-                Combo("Largest picture size", new (object, string)[]
+                if (!SizeControl("Picture size and quality"))
                 {
-                    (1024, "1024 px"), (1280, "1280 px (email)"), (1600, "1600 px"), (1920, "1920 px (web, screens)"),
-                    (2560, "2560 px"), (2800, "2800 px (print)"), (4000, "4000 px (HD print)")
-                }, _o.MaxDimension, v => _o.MaxDimension = (int)v);
-                QualitySlider("JPEG quality", FormatImageQuality);
+                    Combo("Largest picture size", new (object, string)[]
+                    {
+                        (1024, "1024 px"), (1280, "1280 px (email)"), (1600, "1600 px"), (1920, "1920 px (web, screens)"),
+                        (2560, "2560 px"), (2800, "2800 px (print)"), (4000, "4000 px (HD print)")
+                    }, _o.MaxDimension, v => _o.MaxDimension = (int)v);
+                    QualitySlider("JPEG quality", FormatImageQuality);
+                }
             }
             Check("Remove personal info (author, last editor, company)", _o.StripMetadata, v => _o.StripMetadata = v);
             Note(lossy
@@ -505,6 +490,62 @@ namespace OgConverter.Views
         {
             var choices = Choices();
             Combo(label, choices.Select(c => ((object)c.Key, c.Label)).ToList(), _o.Format, v => _o.Format = (string)v, rebuild: true);
+        }
+
+        /// <summary>
+        /// "Size control": the quality settings (<paramref name="qualityLabel"/>), or a target file size. Returns true when
+        /// a target size is chosen, so the caller leaves out the controls it replaces.
+        /// </summary>
+        private bool SizeControl(string qualityLabel)
+        {
+            bool bySize = _o.TargetSizeMb != 0;
+            Label("Size control");
+            var rateRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+            var byQuality = new RadioButton { Content = qualityLabel, GroupName = "Rate", IsChecked = !bySize, Margin = new Thickness(0, 0, 18, 0) };
+            var bySizeRadio = new RadioButton { Content = "Target file size", GroupName = "Rate", IsChecked = bySize };
+            byQuality.Checked += (_, _) => { if (_building) return; _o.TargetSizeMb = 0; Dispatcher.BeginInvoke(Rebuild); };
+            bySizeRadio.Checked += (_, _) =>
+            {
+                if (_building) return;
+                _o.TargetSizeMb = DefaultTargetMb();
+                Dispatcher.BeginInvoke(Rebuild);
+            };
+            rateRow.Children.Add(byQuality);
+            rateRow.Children.Add(bySizeRadio);
+            SettingsPanel.Children.Add(rateRow);
+
+            if (bySize)
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 14) };
+                var box = new TextBox { Width = 90, Text = _o.TargetSizeMb > 0 ? _o.TargetSizeMb.ToString("0.####", CultureInfo.CurrentCulture) : "" };
+                box.TextChanged += (_, _) =>
+                {
+                    if (_building) return;
+                    _o.TargetSizeMb = double.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out double mb) && mb > 0 ? mb : -1;
+                    Refresh();
+                };
+                row.Children.Add(box);
+                row.Children.Add(new TextBlock { Text = "MB  (0.5 = 500 KB)", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Foreground = (Brush)FindResource("TextSecondaryBrush") });
+                SettingsPanel.Children.Add(row);
+            }
+            return bySize;
+        }
+
+        /// <summary>About half the file, as a round number: where the target box starts.</summary>
+        private double DefaultTargetMb()
+        {
+            double half = new FileInfo(_path).Length / 2.0 / 1_000_000;
+            return half >= 2 ? Math.Round(half) : Math.Max(0.1, Math.Round(half, 1));
+        }
+
+        /// <summary>Common upload limits, for files bigger than them.</summary>
+        private void SizePresets()
+        {
+            long size = new FileInfo(_path).Length;
+            foreach (var (mb, label) in new[] { (2.0, "Under 2 MB"), (1.0, "Under 1 MB"), (0.5, "Under 500 KB") })
+            {
+                if (CompressionService.TargetBytes(mb) < size) Preset(label, o => o.TargetSizeMb = mb, o => o.TargetSizeMb == mb);
+            }
         }
 
         private void SpeedCombo() =>
@@ -634,6 +675,18 @@ namespace OgConverter.Views
             if (missing != null && _encoders.Count > 0 && !_encoders.Contains(missing))
             {
                 return $"Your FFmpeg build has no {missing} encoder. Install the full build (winget install Gyan.FFmpeg) or choose another format.";
+            }
+
+            // Target size for everything but video (which checks its own below)
+            if (_kind != CompressionKind.Video && _o.TargetSizeMb != 0 && CompressionService.SupportsTargetSize(_kind, _o))
+            {
+                if (_o.TargetSizeMb < 0) return "Enter a target size in MB, for example 1 or 0.5.";
+                long size = new FileInfo(_path).Length;
+                if (CompressionService.TargetBytes(_o.TargetSizeMb) >= size)
+                    return $"The target ({_o.TargetSizeMb:0.###} MB) isn't smaller than the file ({FormatSize(size)}).";
+                if (_kind != CompressionKind.Audio) warnings.Add("Finding the best quality that fits takes several tries, so this is slower than a fixed quality.");
+                else if (_media?.DurationSeconds > 0 && CompressionService.TargetBytes(_o.TargetSizeMb) * 8 / _media.DurationSeconds / 1000 is var kbps && kbps < 48)
+                    warnings.Add($"That leaves about {kbps:0} kbps for {FormatDuration(_media.DurationSeconds)} of audio; expect muffled sound. Mono helps for speech.");
             }
 
             switch (_kind)

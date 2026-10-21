@@ -103,7 +103,20 @@ Drag any file, open the **Tools** wheel (`Ctrl`), choose **Compress**. A dialog 
 | **ZIP / TAR** | ZIP re-packed at maximum; TAR → `.tar.gz` / `.tar.br` | n/a |
 | **Everything else** (text, logs, CSV, JSON…) | ZIP, GZip, **Brotli**; JSON minify (more formats: Actions › **Archive**) | n/a |
 
-**Presets** include *Discord 10 MB*, *WhatsApp 16 MB* and *Email 25 MB* for video, *Voice/podcast* for audio, and the classic PDF and Office resolution presets. Long jobs show a progress toast.
+**Target file size**: in Lossy mode, choose **Size control › Target file size** and type a size (for example `1` for 1 MB, `0.5` for
+500 KB) instead of guessing a quality. Works for images (every lossy format except Guetzli), GIFs, video, audio, PDFs and Office files:
+
+- **Images, GIFs, PDFs, Office files**: OG Converter tries qualities from the best down and keeps the highest one that fits. Only when even
+  a low quality is too big does it make the picture smaller (pictures in documents: lower resolution), as little as needed. A 7 MB PNG
+  saved as a JPEG under 1 MB keeps its full size and gets the best JPEG quality that fits.
+- **Audio**: the highest bitrate that fits the length of the track (MP3 at a constant bitrate), checked after encoding.
+- **Video**: the bitrate for the size, encoded in two passes (as before).
+
+The limit counts 1 MB as 1,000,000 bytes, so the file is under it whether a site counts megabytes the Windows or the Linux way. If a
+file can't get that small at all, the smallest result is kept and marked *Smallest possible, over target* in Recent activity.
+
+**Presets** include *Under 2 MB*, *Under 1 MB* and *Under 500 KB* for images, PDFs and Office files, *Discord 10 MB*, *WhatsApp 16 MB*
+and *Email 25 MB* for video, *Voice/podcast* for audio, and the classic PDF and Office resolution presets. Long jobs show a progress toast.
 
 Notes:
 - WebP, AVIF, JPEG XL, palette PNG, GIF, video and audio need **FFmpeg** (the full build includes every encoder used). JPEG, PNG-lossless, TIFF, PDF, Office and archive compression work without it.
@@ -408,6 +421,8 @@ Protect/Unlock, PDF split/merge, Crop, Trim), notifications, the tray icon, soun
   manager's right-click menu (Files, Dolphin, Nemo) or with `og-converter --wheel <file>`.
 - **Updates**: the Linux download isn't an AppImage yet, so **Check for updates** shows what's new and links to the release page instead
   of updating in place.
+- **Title bar**: the main window still has the desktop's own title bar above the app's header. On Windows the app draws a single bar
+  with its own buttons; on Linux that's planned for a later release.
 - Microsoft Office, winget, Windows OCR and Unblock are Windows features; on Linux, LibreOffice handles Office files and Tesseract reads text.
 
 Found a bug, or something that works differently from Windows? Please **[open an issue](../../issues)** and mention your distribution and desktop.

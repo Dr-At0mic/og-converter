@@ -53,6 +53,24 @@ namespace OgConverter.Services
         public static bool IsLosslessAudioSource(string path) =>
             Path.GetExtension(path).TrimStart('.').ToLowerInvariant() is "wav" or "flac" or "aiff" or "aif" or "alac";
 
+        /// <summary>
+        /// Whether these choices can aim for <see cref="CompressionOptions.TargetSizeMb"/> instead of a fixed quality:
+        /// lossy video, audio, images (not Guetzli, too slow to try several qualities), GIFs, PDFs and Office files.
+        /// </summary>
+        public static bool SupportsTargetSize(CompressionKind kind, CompressionOptions o) =>
+            o.Mode == CompressionMode.Lossy && kind switch
+            {
+                CompressionKind.Image => o.Format != "guetzli",
+                CompressionKind.AnimatedGif or CompressionKind.Video or CompressionKind.Audio or CompressionKind.Pdf or CompressionKind.Office => true,
+                _ => false
+            };
+
+        /// <summary>
+        /// The hard limit for a target in MB. One MB counts as 1,000,000 bytes, so the file is under the target however
+        /// the system counts megabytes (Linux file managers use 1,000,000, Windows 1,048,576).
+        /// </summary>
+        public static long TargetBytes(double targetMb) => (long)(targetMb * 1_000_000);
+
         /// <summary>Sensible starting choices for a file (used when the dialog has no saved choices for its kind).</summary>
         public static CompressionOptions Defaults(CompressionKind kind, string path)
         {
@@ -88,6 +106,7 @@ namespace OgConverter.Services
                 o.Format = def.Mode == o.Mode && allowed.Contains(def.Format) ? def.Format : allowed[0];
             }
             o.Quality = Math.Clamp(o.Quality, 1, 100);
+            if (o.TargetSizeMb < 0) o.TargetSizeMb = 0;
             return o;
         }
 
@@ -232,14 +251,22 @@ namespace OgConverter.Services
         /// <summary>
         /// Compresses <paramref name="src"/>. <paramref name="targetFor"/>(extension, suffix) returns a free output path.
         /// Returns the output path. Throws if the result isn't smaller than the original (and deletes it).
+        /// <paramref name="targetMissed"/> is called when a target size couldn't be reached and the smallest result was kept.
         /// </summary>
         public static async Task<string> CompressAsync(string src, CompressionOptions? options, string? ffmpeg,
-            Func<string, string, string> targetFor, IProgress<double>? progress = null)
+            Func<string, string, string> targetFor, IProgress<double>? progress = null, Action? targetMissed = null)
         {
             var kind = KindOf(src) ?? throw new InvalidOperationException("This file type is already compressed; there's nothing more to squeeze out.");
             var o = Normalize(kind, src, options ?? Defaults(kind, src));
 
-            string target = kind switch
+            // Video aims for a target size by bitrate (below); the others search for the best quality that fits
+            bool toSize = o.TargetSizeMb > 0 && kind != CompressionKind.Video && SupportsTargetSize(kind, o);
+            bool reached = true;
+            string target = toSize ? kind switch
+            {
+                CompressionKind.Audio => await CompressAudioToSizeAsync(src, o, RequireFFmpeg(ffmpeg), targetFor, progress, r => reached = r),
+                _ => await CompressToSizeAsync(kind, src, o, ffmpeg, targetFor, progress, r => reached = r)
+            } : kind switch
             {
                 CompressionKind.Image => await CompressImageAsync(src, o, ffmpeg, targetFor, progress),
                 CompressionKind.AnimatedGif => await CompressGifAsync(src, o, RequireFFmpeg(ffmpeg), targetFor, progress),
@@ -261,6 +288,7 @@ namespace OgConverter.Services
                     ? "Already as small as it gets without losing quality. Try Lossy compression for a smaller file."
                     : "Already compact: this setting couldn't make it smaller. Try a lower quality or a smaller size.");
             }
+            if (!reached) targetMissed?.Invoke();
             return target;
         }
 
@@ -801,14 +829,18 @@ namespace OgConverter.Services
                         case "opus":
                             Require(encoders, "libopus", "Opus");
                             outExt = "opus";
-                            args.AddRange(new[] { "-c:a", "libopus", "-b:a", kbps, "-vbr", "on", "-compression_level", "10",
+                            // Aiming for a size: constrained VBR stays close to the bitrate
+                            args.AddRange(new[] { "-c:a", "libopus", "-b:a", kbps, "-vbr", o.TargetSizeMb > 0 ? "constrained" : "on", "-compression_level", "10",
                                                   "-application", o.Mono && o.AudioKbps <= 48 ? "voip" : "audio" });
                             keepCover = false; // Ogg can't carry an attached picture stream
                             break;
                         case "mp3":
                             Require(encoders, "libmp3lame", "MP3");
                             outExt = "mp3";
-                            args.AddRange(new[] { "-c:a", "libmp3lame", "-q:a", LameVbrLevel(o.AudioKbps).ToString(CultureInfo.InvariantCulture) });
+                            // Aiming for a size: constant bitrate, since VBR levels only roughly match a bitrate
+                            args.AddRange(o.TargetSizeMb > 0
+                                ? new[] { "-c:a", "libmp3lame", "-b:a", kbps }
+                                : new[] { "-c:a", "libmp3lame", "-q:a", LameVbrLevel(o.AudioKbps).ToString(CultureInfo.InvariantCulture) });
                             break;
                         default:
                             outExt = "m4a";
@@ -928,6 +960,301 @@ namespace OgConverter.Services
             return target;
         }
 
+        // ---------- Target size ----------
+
+        /// <summary>
+        /// One way to make a file: <see cref="Encode"/>(quality, size, path) writes it at a quality and a size (longest edge in
+        /// pixels, or image resolution in dpi for PDFs). A <see cref="QualityStep"/> of 0 means quality changes nothing.
+        /// </summary>
+        private sealed record SizeSearch(string Ext, int StartSize, int MinSize, int MinQuality, int MaxQuality, int QualityStep,
+            Func<int, int, string, Task> Encode);
+
+        /// <summary>
+        /// Images, GIFs, PDFs and Office files: the highest quality that fits in the target at the largest size, made smaller
+        /// (pixels, or the resolution of pictures in documents) only when even a low quality doesn't fit.
+        /// </summary>
+        private static async Task<string> CompressToSizeAsync(CompressionKind kind, string src, CompressionOptions o, string? ffmpeg,
+            Func<string, string, string> targetFor, IProgress<double>? progress, Action<bool> reached)
+        {
+            string? scratch = null; // the picture at the current size as PNG, for FFmpeg's encoders
+            string? decoded = null; // the original as PNG, when only FFmpeg can read it
+            try
+            {
+                SizeSearch search;
+                switch (kind)
+                {
+                    case CompressionKind.Image:
+                    {
+                        string ext = Ext(src);
+                        string outExt = o.Format == "keep" ? (ext == "jpeg" ? "jpg" : ext == "tif" ? "tiff" : ext) : o.Format;
+                        string input = src;
+                        var full = await Task.Run(() => ImageCodec.TryLoad(input, applyOrientation: true, o.MaxDimension));
+                        if (full == null)
+                        {
+                            // Formats the image backend can't decode (AVIF, some WebP): FFmpeg turns the original into a PNG first
+                            decoded = NewTempPath("png");
+                            await MediaToolkit.RunAsync(RequireFFmpeg(ffmpeg), new[] { "-i", src, "-frames:v", "1", decoded });
+                            input = decoded;
+                            full = await Task.Run(() => ImageCodec.TryLoad(input, applyOrientation: false, o.MaxDimension))
+                                   ?? throw new InvalidOperationException(ImageCodec.CantOpenPicture);
+                        }
+
+                        int longest = Math.Max(full.Bitmap.Width, full.Bitmap.Height);
+                        var current = full;
+                        int currentSize = longest;
+                        bool palette = outExt == "png" && !full.HasPartialAlpha;
+                        bool qualityMatters = palette || outExt is "jpg" or "webp" or "avif" or "jxl";
+
+                        search = new SizeSearch(outExt, longest, Math.Min(longest, 64), palette ? 20 : 35, 100, qualityMatters ? 2 : 0, async (q, size, path) =>
+                        {
+                            if (size != currentSize)
+                            {
+                                // Decoded again at that size (bitmaps belong to the thread that decoded them, so they can't be resized later)
+                                current = size >= longest ? full : await Task.Run(() => ImageCodec.TryLoad(input, applyOrientation: input == src, size))
+                                                                   ?? throw new InvalidOperationException(ImageCodec.CantOpenPicture);
+                                currentSize = size;
+                                if (scratch != null) TryDelete(scratch);
+                                scratch = null;
+                            }
+                            var picture = current;
+                            switch (outExt)
+                            {
+                                case "jpg":
+                                    await Task.Run(() => ImageCodec.SaveJpeg(ImageCodec.FlattenIfTransparent(picture), path, q, o.StripMetadata ? null : full.Metadata));
+                                    break;
+                                case "tiff":
+                                    await Task.Run(() => ImageCodec.SaveTiff(picture.Bitmap, path));
+                                    break;
+                                default:
+                                    if (scratch == null)
+                                    {
+                                        string png = NewTempPath("png");
+                                        // AVIF here is 4:2:0 without an alpha plane: put transparent areas on white instead of black
+                                        var pixels = outExt == "avif" ? ImageCodec.FlattenIfTransparent(picture) : picture.Bitmap;
+                                        await Task.Run(() => ImageCodec.SavePng(pixels, png));
+                                        scratch = png;
+                                    }
+                                    var oq = o.Clone();
+                                    oq.Quality = q;
+                                    await EncodeImageWithFFmpegAsync(RequireFFmpeg(ffmpeg), scratch, path, outExt, oq, 0, picture.HasPartialAlpha);
+                                    break;
+                            }
+                        });
+                        break;
+                    }
+
+                    case CompressionKind.AnimatedGif:
+                    {
+                        string ff = RequireFFmpeg(ffmpeg);
+                        var info = await MediaToolkit.ProbeAsync(ff, src);
+                        int longest = Math.Max(info.Width, info.Height);
+                        if (o.MaxDimension > 0 && longest > o.MaxDimension) longest = o.MaxDimension;
+                        search = new SizeSearch(o.Format == "webp" ? "webp" : "gif", longest, Math.Min(longest, 64), o.Format == "webp" ? 35 : 20, 100, 4, async (q, size, path) =>
+                        {
+                            var oq = o.Clone();
+                            oq.Quality = q;
+                            oq.MaxDimension = size;
+                            await CompressGifAsync(src, oq, ff, (_, _) => path, null);
+                        });
+                        break;
+                    }
+
+                    case CompressionKind.Pdf:
+                        // From print resolution down; JPEG quality above 95 only adds bytes
+                        search = new SizeSearch("pdf", 300, 50, 40, 95, 5, async (q, dpi, path) =>
+                        {
+                            var oq = o.Clone();
+                            oq.Quality = q;
+                            oq.PdfDpi = dpi;
+                            await CompressPdfAsync(src, oq, (_, _) => path);
+                        });
+                        break;
+
+                    case CompressionKind.Office:
+                        search = new SizeSearch(Ext(src), 4000, 320, 40, 95, 5, async (q, edge, path) =>
+                        {
+                            var oq = o.Clone();
+                            oq.Quality = q;
+                            oq.MaxDimension = edge;
+                            await OfficeCompressor.CompressAsync(src, path, oq, ffmpeg);
+                        });
+                        break;
+
+                    default:
+                        throw new InvalidOperationException("A target size isn't possible for this kind of file.");
+                }
+
+                var (file, fits) = await FitToSizeAsync(search, TargetBytes(o.TargetSizeMb), progress);
+                string target = targetFor(search.Ext, "_compressed");
+                File.Move(file, target, overwrite: true);
+                reached(fits);
+                return target;
+            }
+            finally
+            {
+                if (scratch != null) TryDelete(scratch);
+                if (decoded != null) TryDelete(decoded);
+            }
+        }
+
+        /// <summary>
+        /// Looks for the highest quality that fits in <paramref name="targetBytes"/>, at the largest size first. Only when even the
+        /// lowest quality is too big does it try a smaller size, estimated from how far off that try was. Returns a temp file:
+        /// the best fit, or the smallest try when nothing fit.
+        /// </summary>
+        private static async Task<(string Path, bool Fits)> FitToSizeAsync(SizeSearch s, long targetBytes, IProgress<double>? progress)
+        {
+            string? best = null, smallest = null;
+            long smallestBytes = long.MaxValue, lastBytes = 0;
+            int tries = 0;
+
+            async Task<bool> Fits(int quality, int size)
+            {
+                string path = NewTempPath(s.Ext);
+                try
+                {
+                    await s.Encode(quality, size, path);
+                }
+                catch
+                {
+                    TryDelete(path);
+                    throw;
+                }
+                lastBytes = new FileInfo(path).Length;
+                progress?.Report(Math.Min(0.95, ++tries / 14.0));
+                if (lastBytes <= targetBytes)
+                {
+                    // Each fit is at a higher quality than the one before
+                    if (best != null) TryDelete(best);
+                    best = path;
+                    return true;
+                }
+                if (lastBytes < smallestBytes)
+                {
+                    if (smallest != null) TryDelete(smallest);
+                    smallest = path;
+                    smallestBytes = lastBytes;
+                }
+                else
+                {
+                    TryDelete(path);
+                }
+                return false;
+            }
+
+            try
+            {
+                int size = s.StartSize;
+                for (int round = 0; round < 8; round++)
+                {
+                    if (s.QualityStep <= 0)
+                    {
+                        if (await Fits(s.MaxQuality, size)) break;
+                    }
+                    else
+                    {
+                        // At full size the best quality often fits already; at a smaller size, usually not even the lowest
+                        int lo = s.MinQuality, hi = s.MaxQuality;
+                        bool loFits;
+                        if (round == 0)
+                        {
+                            if (await Fits(hi, size)) break;
+                            loFits = await Fits(lo, size);
+                        }
+                        else
+                        {
+                            loFits = await Fits(lo, size);
+                            if (loFits && await Fits(hi, size)) break;
+                        }
+                        if (loFits)
+                        {
+                            // lo fits and hi doesn't: narrow down between them
+                            while (hi - lo > s.QualityStep)
+                            {
+                                int mid = (lo + hi) / 2;
+                                if (await Fits(mid, size)) lo = mid;
+                                else hi = mid;
+                            }
+                            break;
+                        }
+                    }
+
+                    // Too big even at the lowest quality: shrink. Bytes grow roughly with the pixel count, so with the square of the size.
+                    if (size <= s.MinSize) break;
+                    int next = (int)(size * Math.Sqrt((double)targetBytes / lastBytes) * 0.92);
+                    size = Math.Max(s.MinSize, Math.Min(next, (int)(size * 0.85)));
+                }
+
+                if (best != null)
+                {
+                    if (smallest != null) TryDelete(smallest);
+                    return (best, true);
+                }
+                return (smallest ?? throw new InvalidOperationException("Nothing was written."), false);
+            }
+            catch
+            {
+                if (best != null) TryDelete(best);
+                if (smallest != null) TryDelete(smallest);
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Audio: the highest bitrate the target allows for this length, checked after encoding and lowered if the file still
+        /// comes out too big (cover art, container overhead).
+        /// </summary>
+        private static async Task<string> CompressAudioToSizeAsync(string src, CompressionOptions o, string ffmpeg, Func<string, string, string> targetFor,
+            IProgress<double>? progress, Action<bool> reached)
+        {
+            var info = await MediaToolkit.ProbeAsync(ffmpeg, src);
+            if (!info.HasAudio) throw new InvalidOperationException("This file has no audio stream.");
+            if (info.DurationSeconds <= 0)
+                throw new InvalidOperationException("The length of this audio couldn't be read, so a bitrate for the target size can't be worked out. Choose a bitrate instead.");
+
+            long targetBytes = TargetBytes(o.TargetSizeMb);
+            int[] rates = o.Format switch
+            {
+                "opus" => new[] { 6, 8, 12, 16, 24, 32, 48, 64, 80, 96, 112, 128, 160, 192, 256 },
+                "mp3" => new[] { 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 }, // the bitrates an MP3 frame can have
+                _ => new[] { 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320 }
+            };
+            int Allowed(double kbps) => rates.LastOrDefault(r => r <= kbps, rates[0]);
+
+            // 3% for the container
+            int kbps = Allowed(targetBytes * 8 * 0.97 / info.DurationSeconds / 1000);
+            string? result = null;
+            bool fits = false;
+            try
+            {
+                for (int attempt = 0; attempt < 4; attempt++)
+                {
+                    var oa = o.Clone();
+                    oa.AudioKbps = kbps;
+                    string? temp = null;
+                    await CompressAudioAsync(src, oa, ffmpeg, (ext, _) => temp = NewTempPath(ext), progress);
+                    if (result != null) TryDelete(result);
+                    result = temp!;
+
+                    long bytes = new FileInfo(result).Length;
+                    fits = bytes <= targetBytes;
+                    if (fits || kbps == rates[0]) break;
+                    int lower = Allowed(kbps * (double)targetBytes / bytes * 0.97);
+                    kbps = lower < kbps ? lower : rates[Math.Max(0, Array.IndexOf(rates, kbps) - 1)];
+                }
+
+                string target = targetFor(Path.GetExtension(result!).TrimStart('.'), "_compressed");
+                File.Move(result!, target, overwrite: true);
+                reached(fits);
+                return target;
+            }
+            catch
+            {
+                if (result != null) TryDelete(result);
+                throw;
+            }
+        }
+
         /// <summary>One-line description of what will happen, for the dialog.</summary>
         public static string Describe(CompressionKind kind, string path, CompressionOptions o, MediaInfo? media = null, bool hardwareAvailable = true)
         {
@@ -962,6 +1289,15 @@ namespace OgConverter.Services
                     parts.Add(o.Format switch { "ffv1" => "FFV1 lossless → MKV", "x264" => "H.264 lossless → MKV", "x265" => "H.265 lossless → MKV", _ => "Streams copied as-is, container cleaned" });
                     break;
 
+                case CompressionKind.Audio when o.Mode == CompressionMode.Lossy && o.TargetSizeMb > 0:
+                    parts.Add(o.Format switch { "opus" => "Opus → .opus", "mp3" => "MP3 (constant bitrate) → .mp3", _ => "AAC → .m4a" });
+                    parts.Add(media?.DurationSeconds > 0
+                        ? $"highest bitrate under {TargetText(o)} (≈{Math.Min(o.Format == "opus" ? 256 : 320, TargetBytes(o.TargetSizeMb) * 8 * 0.97 / media.DurationSeconds / 1000):0} kbps)"
+                        : $"highest bitrate under {TargetText(o)}");
+                    if (o.Mono) parts.Add("mono");
+                    if (o.SampleRate > 0 && o.Format != "opus") parts.Add($"{o.SampleRate / 1000.0:0.##} kHz");
+                    break;
+
                 case CompressionKind.Audio when o.Mode == CompressionMode.Lossy:
                     parts.Add(o.Format switch
                     {
@@ -988,7 +1324,12 @@ namespace OgConverter.Services
                     else if (o.Mode == CompressionMode.Lossy)
                     {
                         string q = o.Format == "keep" && ext == "png" || o.Format == "gif" ? $"{PaletteColors(o.Quality)} colors" : $"quality {o.Quality}";
-                        parts.Add($"{fmt}, {q}");
+                        if (o.TargetSizeMb > 0)
+                        {
+                            parts.Add($"{fmt}, best quality under {TargetText(o)}");
+                            parts.Add("made smaller only if it has to be");
+                        }
+                        else parts.Add($"{fmt}, {q}");
                         if (o.MaxDimension > 0) parts.Add($"max {o.MaxDimension} px");
                         if (kind == CompressionKind.AnimatedGif && o.MaxFps > 0) parts.Add($"max {o.MaxFps} fps");
                     }
@@ -996,15 +1337,15 @@ namespace OgConverter.Services
                     break;
 
                 case CompressionKind.Pdf:
-                    parts.Add(o.Mode == CompressionMode.Lossy
-                        ? $"Images ≤ {o.PdfDpi} dpi, JPEG quality {o.Quality}" + (o.Grayscale ? ", grayscale" : "")
-                        : "Streams re-compressed, thumbnails and unused objects removed");
+                    parts.Add(o.Mode != CompressionMode.Lossy ? "Streams re-compressed, thumbnails and unused objects removed"
+                        : o.TargetSizeMb > 0 ? $"Images at the best resolution and quality under {TargetText(o)}" + (o.Grayscale ? ", grayscale" : "")
+                        : $"Images ≤ {o.PdfDpi} dpi, JPEG quality {o.Quality}" + (o.Grayscale ? ", grayscale" : ""));
                     break;
 
                 case CompressionKind.Office:
-                    parts.Add(o.Mode == CompressionMode.Lossy
-                        ? $"Pictures ≤ {o.MaxDimension} px, JPEG quality {o.Quality}"
-                        : "Package re-zipped at maximum, PNGs optimized");
+                    parts.Add(o.Mode != CompressionMode.Lossy ? "Package re-zipped at maximum, PNGs optimized"
+                        : o.TargetSizeMb > 0 ? $"Pictures at the best size and quality under {TargetText(o)}"
+                        : $"Pictures ≤ {o.MaxDimension} px, JPEG quality {o.Quality}");
                     break;
 
                 default:
@@ -1024,5 +1365,9 @@ namespace OgConverter.Services
             }
             return string.Join(" · ", parts);
         }
+
+        /// <summary>"1 MB", "500 KB": a target as people type it.</summary>
+        private static string TargetText(CompressionOptions o) =>
+            o.TargetSizeMb < 1 ? $"{o.TargetSizeMb * 1000:0} KB" : $"{o.TargetSizeMb:0.##} MB";
     }
 }

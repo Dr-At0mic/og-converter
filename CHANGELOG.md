@@ -5,6 +5,20 @@ What changed in each release. The release workflow copies a version's section in
 
 Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fails if it's missing.
 
+## [1.6.0]
+
+- **Compress to a target file size**: in Compress › Lossy, choose **Size control › Target file size** and type the size you need
+  (for example `1` for 1 MB or `0.5` for 500 KB) instead of trying qualities by hand. OG Converter finds the highest quality that fits:
+  for images (JPEG, WebP, AVIF, JPEG XL, palette PNG, TIFF), GIFs, PDFs and Word/Excel/PowerPoint/OpenDocument files it tries
+  qualities from the best down, and only makes the picture smaller (or lowers the resolution of pictures in a document) when even a
+  low quality doesn't fit. Audio gets the highest bitrate that fits its length. Video keeps its two-pass target size.
+  New presets: **Under 2 MB**, **Under 1 MB** and **Under 500 KB** for images, PDFs and Office files. The limit counts 1 MB as
+  1,000,000 bytes, so the file is under it however a site counts megabytes. If a file can't get that small, the smallest result is
+  kept and marked "Smallest possible, over target".
+- **Linux, GNOME**: pressing a file and tapping the key before moving the mouse no longer opens an empty wheel that only filled in
+  once the mouse moved. The wheel now opens as soon as the drag starts. This needs the updated helper extension (version 3):
+  Settings › Desktop integration offers the update, then log out and back in once.
+
 ## [1.5.0]
 
 - **Linux version (beta)**: OG Converter now runs on Linux, as `og-converter-vX.Y.Z-linux-x64.tar.gz` next to the Windows exe.
