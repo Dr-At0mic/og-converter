@@ -54,3 +54,10 @@ To ensure zero context loss when switching between different AI agents or sessio
 - **Zero Breakage**: Always run compiler, linter, and unit test suites before completing tasks.
 - **Minimal Diffs**: Prefer targeted modifications over large rewrites.
 - **Traceability**: All architectural decisions and trade-offs must be logged in `docs/agent-log/`.
+
+---
+
+## 4. Testing the Linux build: VMware VM, never WSL
+
+- Build and test the Linux app **only on the VMware Workstation Pro VM** (Ubuntu 26.04, GNOME 50, Wayland), reached with `ssh ogvm`. **Do not use WSL**: it has no GNOME Shell, no Wayland session and no D-Bus session bus, so results from it don't count.
+- Read [docs/LINUX_TESTING.md](docs/LINUX_TESTING.md) before you touch the Linux build. It covers starting the VM with `vmrun`, copying the source, building, the self-test, running the GUI over SSH, and what needs the user.
