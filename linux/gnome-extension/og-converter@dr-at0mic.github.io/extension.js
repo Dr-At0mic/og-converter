@@ -63,20 +63,6 @@ const NUDGE_BACK_MS = 30;
 const IDLE_POLL_MS = 100;  // only looks at BUTTON1_MASK
 const FAST_POLL_MS = 20;   // while button 1 is held
 
-// A key tapped while the button is held but before the drag has started (the
-// pointer hasn't moved past the toolkit's drag threshold yet) waits for
-// 'dnd-enter': until then there's no drag, so the wheel couldn't learn the
-// file. In case the drag source never makes mutter emit 'dnd-enter', it is
-// also sent once the pointer has moved this far (logical pixels) from where
-// the button went down, beyond any toolkit's drag threshold.
-const DRAG_FALLBACK_PX = 24;
-
-// To get that drag going without the user moving the mouse (as on Windows,
-// where press + tap opens a full wheel straight away), the pointer moves this
-// far and back: past GTK's drag threshold (8 px by default), below the
-// fallback above.
-const START_DRAG_PX = 16;
-
 // Only run detection while the app owns its bus name. Set to false to make
 // the extension always poll (e.g. to test the gesture with debug logging).
 const REQUIRE_APP_ON_BUS = true;
@@ -113,11 +99,10 @@ function isNoOwnerError(e) {
  * Watches the seat for "button 1 held + modifier tapped" and reports edges.
  */
 class DragTapDetector {
-    constructor({onKeyTapped, onKeyReleased, onButtonReleased, onStartDrag, debug}) {
+    constructor({onKeyTapped, onKeyReleased, onButtonReleased, debug}) {
         this._onKeyTapped = onKeyTapped;
         this._onKeyReleased = onKeyReleased;
         this._onButtonReleased = onButtonReleased;
-        this._onStartDrag = onStartDrag;
         this._debug = debug;
 
         this._timerId = 0;
@@ -135,9 +120,6 @@ class DragTapDetector {
         this._down = new Set();      // keys down at the last poll
         this._tapped = new Set();    // keys we sent KeyTapped for and not yet released
         this._anyTap = false;        // at least one KeyTapped during this press
-        this._pending = new Map();   // key -> released since: tapped before the drag started, not sent yet
-        this._downX = 0;             // where button 1 went down
-        this._downY = 0;
     }
 
     start() {
@@ -219,8 +201,6 @@ class DragTapDetector {
             // Button just went down. Keys already held now (e.g. Shift-click
             // to extend a selection) must not trigger.
             this._held = true;
-            this._downX = x;
-            this._downY = y;
             this._ignored = keysDown(mods);
             this._down = new Set(this._ignored);
             this._debug(`button1 down at ${x},${y}; ignoring [${[...this._ignored]}]`);
@@ -244,50 +224,19 @@ class DragTapDetector {
             const is = now.has(name);
             if (is && !was) {
                 if (!this._ignored.has(name)) {
-                    if (this._dnd && !this._dndActive) {
-                        // Pressed but not dragging yet: start the drag, and wait for it
-                        const first = this._pending.size === 0;
-                        this._pending.set(name, false);
-                        this._debug(`${name} tapped before the drag started; waiting`);
-                        if (first)
-                            this._onStartDrag();
-                    } else {
-                        this._tapped.add(name);
-                        this._anyTap = true;
-                        this._onKeyTapped(name, x, y);
-                    }
+                    this._tapped.add(name);
+                    this._anyTap = true;
+                    this._onKeyTapped(name, x, y);
                 }
             } else if (!is && was) {
                 // A key that was down at press time becomes eligible once
                 // released, so release + press again during the drag works.
                 this._ignored.delete(name);
-                if (this._pending.has(name))
-                    this._pending.set(name, true);
-                else if (this._tapped.delete(name))
+                if (this._tapped.delete(name))
                     this._onKeyReleased(name);
             }
         }
         this._down = now;
-
-        if (this._pending.size > 0 &&
-            (this._dndActive || Math.hypot(x - this._downX, y - this._downY) >= DRAG_FALLBACK_PX))
-            this._sendPending(x, y);
-    }
-
-    // The drag has started: send the taps that were waiting for it, at the
-    // pointer's position now. A key already let go is released right after,
-    // as if the whole tap had happened now.
-    _sendPending(x, y) {
-        this._debug(`drag started (dnd=${this._dndActive}); sending [${[...this._pending.keys()]}]`);
-        for (const [name, released] of this._pending) {
-            this._anyTap = true;
-            this._onKeyTapped(name, x, y);
-            if (released)
-                this._onKeyReleased(name);
-            else
-                this._tapped.add(name);
-        }
-        this._pending.clear();
     }
 }
 
@@ -297,7 +246,6 @@ export default class OgConverterExtension extends Extension {
         this._appPresent = false;
         this._stageEventId = 0;
         this._nudgeId = 0;
-        this._nudgeDx = 0;
         this._virtualPointer = null;
 
         this._detector = new DragTapDetector({
@@ -312,10 +260,6 @@ export default class OgConverterExtension extends Extension {
             onButtonReleased: (x, y) => {
                 this._log(`ButtonReleased(${x}, ${y})`);
                 this._callApp('ButtonReleased', new GLib.Variant('(ii)', [x, y]));
-            },
-            onStartDrag: () => {
-                this._log('StartDrag');
-                this._movePointerBriefly(START_DRAG_PX);
             },
             debug: msg => this._log(msg),
         });
@@ -435,29 +379,19 @@ export default class OgConverterExtension extends Extension {
     // The wheel opens under a still pointer, so it can't see the dragged file
     // until the user moves the mouse; one pixel out and back fixes that.
     NudgePointer() {
-        this._movePointerBriefly(1);
-        this._log('NudgePointer');
-    }
-
-    // Moves the pointer dx logical pixels right and, NUDGE_BACK_MS later,
-    // back (virtual pointer device on the default seat).
-    _movePointerBriefly(dx) {
         if (!this._virtualPointer) {
             const seat = Clutter.get_default_backend().get_default_seat();
             this._virtualPointer = seat.create_virtual_device(Clutter.InputDeviceType.POINTER_DEVICE);
         }
-        if (this._nudgeId) {
-            // A move still waiting to go back: take it back first
+        this._virtualPointer.notify_relative_motion(GLib.get_monotonic_time(), 1, 0);
+        if (this._nudgeId)
             GLib.Source.remove(this._nudgeId);
-            this._virtualPointer.notify_relative_motion(GLib.get_monotonic_time(), -this._nudgeDx, 0);
-        }
-        this._nudgeDx = dx;
-        this._virtualPointer.notify_relative_motion(GLib.get_monotonic_time(), dx, 0);
         this._nudgeId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, NUDGE_BACK_MS, () => {
             this._nudgeId = 0;
-            this._virtualPointer?.notify_relative_motion(GLib.get_monotonic_time(), -dx, 0);
+            this._virtualPointer?.notify_relative_motion(GLib.get_monotonic_time(), -1, 0);
             return GLib.SOURCE_REMOVE;
         });
+        this._log('NudgePointer');
     }
 
     SetDebug(enabled) {

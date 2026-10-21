@@ -57,6 +57,11 @@ related_files:
 - User still saw the empty wheel on press + tap: GNOME had **version 2** loaded (`gnome-extensions info` → Version 2; no re-login since the files were copied). Also, v3 as first written would only open the wheel after the user moved, unlike Windows.
 - Added (commit `16cd594`): on the first early tap the extension moves the pointer 16 px and back (`_movePointerBriefly`, shared with `NudgePointer`), past GTK's 8 px threshold, so Files starts the drag and `dnd-enter` sends the tap at once. Syntax checked with `node --check`; copied to the VM's extension folder. Needs a re-login to test.
 
+### Release 2026-10-22
+- User tested extension v3 (with the 16 px start-drag move): **still not working**. User: look into it later, note it, release.
+- Extension work kept on branch `feature/linux-early-tap` (pushed); the release ships extension **v2** unchanged from 1.5.0 (`git checkout main -- linux/gnome-extension`), so drag-and-tap behaves as in 1.5.0. Known issue written up in README (Linux limitations) and `linux/gnome-extension/README.md` (with what to investigate). CHANGELOG line removed.
+- Merged into `main`, tagged `v1.6.0`, pushed; the tag push runs the release workflow.
+
 ## 6. Blockers & Open Questions
 - Waiting for the user's manual verification (VM: log out/in, press a file, tap Shift without moving, then move).
 - Linux custom title bar: deferred by the user; noted in README limitations.

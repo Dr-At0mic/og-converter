@@ -421,6 +421,9 @@ Protect/Unlock, PDF split/merge, Crop, Trim), notifications, the tray icon, soun
   manager's right-click menu (Files, Dolphin, Nemo) or with `og-converter --wheel <file>`.
 - **Updates**: the Linux download isn't an AppImage yet, so **Check for updates** shows what's new and links to the release page instead
   of updating in place.
+- **Press and tap without moving (GNOME)**: pressing a file and tapping the key before the mouse moves opens an empty wheel; the
+  options appear as soon as you move the mouse (Files only starts the drag after a few pixels). Dragging first, then tapping, works
+  normally. On Windows both work.
 - **Title bar**: the main window still has the desktop's own title bar above the app's header. On Windows the app draws a single bar
   with its own buttons; on Linux that's planned for a later release.
 - Microsoft Office, winget, Windows OCR and Unblock are Windows features; on Linux, LibreOffice handles Office files and Tesseract reads text.

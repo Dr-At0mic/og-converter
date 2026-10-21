@@ -15,9 +15,6 @@ Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fail
   New presets: **Under 2 MB**, **Under 1 MB** and **Under 500 KB** for images, PDFs and Office files. The limit counts 1 MB as
   1,000,000 bytes, so the file is under it however a site counts megabytes. If a file can't get that small, the smallest result is
   kept and marked "Smallest possible, over target".
-- **Linux, GNOME**: pressing a file and tapping the key before moving the mouse no longer opens an empty wheel that only filled in
-  once the mouse moved. As on Windows, the full wheel opens straight away. This needs the updated helper extension (version 3):
-  Settings › Desktop integration offers the update, then log out and back in once.
 
 ## [1.5.0]
 

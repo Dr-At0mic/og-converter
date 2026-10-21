@@ -122,9 +122,8 @@ source:
 - `global.get_pointer()` returns `[x, y, mods]`. The mask did contain the
   modifier during the drag, so polling caught the Shift tap.
 - `global.backend.get_dnd()` (Meta.Dnd) emits `dnd-enter` / `dnd-leave` when a
-  Wayland client calls `start_drag`. The extension uses `dnd-enter` to switch
-  to fast polling immediately, and to know when the drag has really started
-  (see below).
+  Wayland client calls `start_drag`. The extension uses `dnd-enter` only to
+  switch to fast polling immediately.
 
 The extension therefore detects the gesture like this:
 
@@ -138,26 +137,20 @@ The extension therefore detects the gesture like this:
 A press and release shorter than 100 ms can be missed. That doesn't matter,
 because a file drag always lasts longer.
 
-### A key tapped before the drag starts
+### Known issue: press and tap without moving
 
-Pressing a file and tapping the key without moving the mouse is not a drag
-yet: Files only starts one when the pointer moves past GTK's drag threshold
-(8 px by default). Until then there is no drag data, so a wheel opened right
-away would be empty, and it filled in only once the user moved the mouse
-(version 2 and earlier). The one-pixel `NudgePointer` doesn't help here,
-because it stays below the threshold.
+Pressing a file and tapping the key before the mouse moves opens an empty
+wheel, which fills in once the mouse moves. The extension only checks "button
+held + key", but Files starts a drag only after the pointer passes GTK's drag
+threshold (8 px), so there is no drag data yet. The one-pixel `NudgePointer`
+stays below the threshold. On Windows the same gesture works.
 
-Since version 3 the extension starts the drag itself, so press + tap opens a
-full wheel straight away, as on Windows: the pointer moves 16 px right and,
-30 ms later, back (virtual pointer device), which is past GTK's threshold.
-The tap waits meanwhile: `KeyTapped` is sent when `dnd-enter` says the drag
-has started, at the pointer's position then. Pressed on empty space, the same
-move only starts (and ends) a tiny rubber-band selection. If the key was already
-let go, `KeyReleased` follows right after, as if the tap had happened then.
-If the button goes up without a drag, nothing is sent. In case a drag source
-never makes mutter emit `dnd-enter`, the tap is also sent once the pointer
-has moved 24 px from where the button went down. Without `Meta.Dnd`, taps are
-sent at once, as before.
+A fix was tried on branch `feature/linux-early-tap` (extension version 3:
+hold the tap until `dnd-enter`, and move the pointer 16 px and back to start
+the drag). It didn't work in a manual test on Ubuntu 26.04 / GNOME 50 and was
+left out of 1.6.0. Not yet known: whether `dnd-enter` fires for that drag,
+and whether a virtual-pointer move starts a GTK drag while the physical
+button is held. Start there, with `SetDebug(true)` and the journal.
 
 ### Do we need `MoveWindowByTitle`?
 
