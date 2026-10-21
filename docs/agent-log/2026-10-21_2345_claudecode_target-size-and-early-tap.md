@@ -52,6 +52,11 @@ related_files:
 - Snapshots checked on both platforms (image/audio target, video target, PDF).
 - **Not verified by hand**: the early-tap fix needs the user to log out and in (GNOME loads extension changes only at login). Extension v3 is copied into the VM's extension folder and the branch build runs on the VM (`~/ogtest`, started with `--background`; the installed app at `~/.local/share/og-converter/app/` was stopped).
 
+### Follow-up 2026-10-22
+- User confirmed target-size compression works on Windows and Linux.
+- User still saw the empty wheel on press + tap: GNOME had **version 2** loaded (`gnome-extensions info` → Version 2; no re-login since the files were copied). Also, v3 as first written would only open the wheel after the user moved, unlike Windows.
+- Added (commit `16cd594`): on the first early tap the extension moves the pointer 16 px and back (`_movePointerBriefly`, shared with `NudgePointer`), past GTK's 8 px threshold, so Files starts the drag and `dnd-enter` sends the tap at once. Syntax checked with `node --check`; copied to the VM's extension folder. Needs a re-login to test.
+
 ## 6. Blockers & Open Questions
 - Waiting for the user's manual verification (VM: log out/in, press a file, tap Shift without moving, then move).
 - Linux custom title bar: deferred by the user; noted in README limitations.
