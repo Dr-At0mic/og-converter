@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -155,7 +157,7 @@ namespace OgConverter
                 // Already open: the key switches wheels
                 if (_overlay.IsVisible)
                 {
-                    _overlay.ShowAt(screenPt, mode, filePath);
+                    _overlay.ShowAt(screenPt, mode, filePath != null ? new[] { filePath } : null);
                     return;
                 }
 
@@ -165,9 +167,9 @@ namespace OgConverter
                 else if (!DragProbeWindow.FullScreenAppInFront) _dragProbe.Begin(mode, screenPt);
             };
 
-            _dragProbe.FileDragConfirmed += (mode, screenPt, filePath) =>
+            _dragProbe.FileDragConfirmed += (mode, screenPt, files) =>
             {
-                _overlay.ShowAt(screenPt, mode, filePath);
+                _overlay.ShowAt(screenPt, mode, files);
             };
 
             _hookService.DismissWheelRequested += () =>
@@ -215,9 +217,12 @@ namespace OgConverter
 
         private void SetupOverlay()
         {
-            _overlay.FileActionRequested += async (filePath, option) =>
+            _overlay.FileActionRequested += async (files, option) =>
             {
-                await ProcessJobAsync(filePath, option);
+                // Merge takes all the dragged PDFs as one job; instant actions (terminal, reveal, copy path) stay on the
+                // first file rather than opening a window per file
+                if (files.Count == 1 || option.Id == "tool_pdf_merge" || !ShowsProgress(option)) await ProcessJobAsync(files[0], option, files);
+                else await ProcessBatchAsync(files, option);
             };
         }
 
@@ -232,12 +237,13 @@ namespace OgConverter
             };
         }
 
-        private async Task ProcessJobAsync(string filePath, WheelItem option)
+        /// <summary>One file (<paramref name="dragged"/>: everything that was dropped, for Merge).</summary>
+        private async Task ProcessJobAsync(string filePath, WheelItem option, IReadOnlyList<string>? dragged = null)
         {
             ToolParameters? parameters;
             try
             {
-                if (!TryCollectToolParameters(filePath, option, out parameters)) return; // user cancelled
+                if (!TryCollectToolParameters(filePath, option, dragged, out parameters)) return; // user cancelled
             }
             catch (Exception ex)
             {
@@ -255,20 +261,16 @@ namespace OgConverter
             ToastNotificationWindow? progressToast = null;
             ConversionJob? running = null;
             IProgress<double>? progress = null;
-            if (option.Mode != WheelMode.Actions || option.Id is "act_zip" or "act_protect")
+            if (ShowsProgress(option))
             {
-                running = new ConversionJob { SourcePath = filePath, Option = option, TargetFormat = option.Title, IsRunning = true };
+                running = NewPlaceholder(filePath, option);
                 _history.Insert(0, running);
                 EmptyHistoryNotice.Visibility = Visibility.Collapsed;
+                UpdateCancelAllButton();
 
                 if (_settingsService.Current.ShowToastOnComplete)
                 {
-                    string title = option.Id == ConversionEngine.CompressToolId ? "Compressing…"
-                                 : option.Id == "act_zip" ? "Creating archive…"
-                                 : option.Id == "act_protect" ? "Protecting…"
-                                 : option.Mode == WheelMode.Convert ? $"Converting to {option.Title}…"
-                                 : $"{option.Title}…";
-                    progressToast = _notifyService.ShowProgress(title, filePath);
+                    progressToast = _notifyService.ShowProgress(ProgressTitle(option, 1), filePath, running.Cancel);
                 }
 
                 // Progress<T> captures this (UI) thread, so both updates land on the dispatcher
@@ -279,14 +281,13 @@ namespace OgConverter
                 });
             }
 
-            var job = await _engine.ExecuteAsync(filePath, option, _settingsService.Current, parameters, progress);
+            var job = running != null
+                ? await RunQueuedAsync(running, parameters, progress)
+                : await _engine.ExecuteAsync(filePath, option, _settingsService.Current, parameters, progress);
 
             Dispatcher.Invoke(() =>
             {
-                int index = running != null ? _history.IndexOf(running) : -1;
-                if (index >= 0) _history[index] = job;
-                else _history.Insert(0, job);
-                EmptyHistoryNotice.Visibility = Visibility.Collapsed;
+                ReplacePlaceholder(running, job);
 
                 if (_settingsService.Current.ShowToastOnComplete)
                 {
@@ -296,9 +297,200 @@ namespace OgConverter
         }
 
         /// <summary>
-        /// Shows the input dialog for tools that need more than one click. Returns false if the user cancelled.
+        /// Several dropped files, one option: asks for any tool input up front, then queues one job per file
+        /// (<see cref="JobQueue"/> decides how many run at once) under a single progress toast.
         /// </summary>
-        private bool TryCollectToolParameters(string filePath, WheelItem option, out ToolParameters? parameters)
+        private async Task ProcessBatchAsync(IReadOnlyList<string> files, WheelItem option)
+        {
+            var settings = _settingsService.Current;
+            var failed = new List<ConversionJob>();
+            var work = new List<(string File, ToolParameters? Parameters)>();
+
+            // Compress (per kind of file) and Zip ask once for the batch; the other dialogs depend on the file itself
+            var shared = new Dictionary<string, ToolParameters?>();
+            foreach (string file in files)
+            {
+                // The wheel showed the first file's options; skip files the pick doesn't apply to
+                if (!FormatRegistry.GetWheelItems(file, option.Mode).Any(i => i.Id == option.Id))
+                {
+                    failed.Add(new ConversionJob { SourcePath = file, Option = option, TargetFormat = option.Title, EndTime = DateTime.Now,
+                                                   ErrorMessage = $"{option.Title} isn't available for this kind of file." });
+                    continue;
+                }
+
+                string? shareKey = option.Id == ConversionEngine.CompressToolId ? "compress:" + (CompressionService.KindOf(file) ?? CompressionKind.General)
+                                 : option.Id == "act_zip" ? "zip" : null;
+                ToolParameters? parameters;
+                if (shareKey != null && shared.TryGetValue(shareKey, out var first))
+                {
+                    // Jobs adjust their options while running, so each gets its own copy
+                    parameters = first == null ? null : new ToolParameters { Compression = first.Compression?.Clone(), Archive = first.Archive?.Clone() };
+                }
+                else
+                {
+                    try
+                    {
+                        // Cancelling a dialog cancels the batch; nothing has started yet
+                        if (!TryCollectToolParameters(file, option, null, out parameters)) return;
+                    }
+                    catch (Exception ex)
+                    {
+                        failed.Add(new ConversionJob { SourcePath = file, Option = option, TargetFormat = option.Title, ErrorMessage = ex.Message, EndTime = DateTime.Now });
+                        continue;
+                    }
+                    if (shareKey != null) shared[shareKey] = parameters;
+                }
+                work.Add((file, parameters));
+            }
+
+            // Newest first, like single jobs: insert in reverse so the batch reads top to bottom in drop order
+            foreach (var f in Enumerable.Reverse(failed)) _history.Insert(0, f);
+            var placeholders = work.Select(w => NewPlaceholder(w.File, option)).ToList();
+            for (int i = placeholders.Count - 1; i >= 0; i--) _history.Insert(0, placeholders[i]);
+            if (_history.Count > 0) EmptyHistoryNotice.Visibility = Visibility.Collapsed;
+            UpdateCancelAllButton();
+
+            int total = files.Count;
+            var results = new List<ConversionJob>(failed);
+            var finished = new HashSet<ConversionJob>();
+            var started = DateTime.Now;
+
+            ToastNotificationWindow? toast = null;
+            if (settings.ShowToastOnComplete && work.Count > 0)
+            {
+                toast = _notifyService.ShowProgress(ProgressTitle(option, total), files[0], () => placeholders.ForEach(p => p.Cancel()));
+            }
+
+            // Overall progress: finished and skipped files count whole, running ones by their own progress
+            void ReportBatch()
+            {
+                if (toast == null) return;
+                var active = placeholders.Where(p => !p.IsQueued && !finished.Contains(p)).ToList();
+                double fraction = (results.Count + active.Sum(p => p.HasProgress ? p.Progress : 0)) / total;
+                int failures = results.Count(r => !r.IsSuccess);
+                string subtitle = $"{results.Count} of {total} done" + (active.Count > 0 ? $"  ·  {active.Count} running" : "")
+                                + (failures > 0 ? $"  ·  {failures} failed" : "");
+                toast.ReportBatch(ProgressTitle(option, total), subtitle, Math.Clamp(fraction, 0, 1));
+            }
+
+            var tasks = work.Select(async (w, i) =>
+            {
+                var running = placeholders[i];
+                var progress = new Progress<double>(f =>
+                {
+                    running.Progress = f;
+                    ReportBatch();
+                });
+                var job = await RunQueuedAsync(running, w.Parameters, progress, onStarted: ReportBatch);
+
+                // Back on the UI thread (awaited from it)
+                finished.Add(running);
+                results.Add(job);
+                ReplacePlaceholder(running, job);
+                ReportBatch();
+            }).ToList();
+            ReportBatch();
+            await Task.WhenAll(tasks);
+
+            if (!settings.ShowToastOnComplete) return;
+            ShowBatchSummary(option, total, results, DateTime.Now - started, toast);
+        }
+
+        /// <summary>The batch toast's final state: counts, the first failure's reason, and the shared output folder.</summary>
+        private void ShowBatchSummary(WheelItem option, int total, List<ConversionJob> results, TimeSpan elapsed, ToastNotificationWindow? toast)
+        {
+            int ok = results.Count(r => r.IsSuccess);
+            int cancelled = results.Count(r => r.ErrorMessage == ConversionEngine.CancelledMessage);
+            int failures = results.Count - ok - cancelled;
+
+            string verb = option.Mode == WheelMode.Convert ? $"converted to {option.Title}" : "done";
+            string title = ok == total ? $"{total} files {verb}" : $"{ok} of {total} files {verb}";
+            var parts = new List<string>();
+            if (failures > 0) parts.Add($"{failures} failed");
+            if (cancelled > 0) parts.Add($"{cancelled} cancelled");
+            var firstError = results.FirstOrDefault(r => !r.IsSuccess && r.ErrorMessage != ConversionEngine.CancelledMessage);
+            string subtitle = parts.Count == 0
+                ? string.Join(", ", results.Where(r => r.IsSuccess).Select(r => r.TargetFileName).Take(3)) + (ok > 3 ? $" +{ok - 3} more" : "")
+                : string.Join("  ·  ", parts);
+            // The first failure's reason (all of them are in Recent activity), else the time taken
+            string metrics = firstError != null ? $"{firstError.SourceFileName}: {firstError.ErrorMessage}" : $"{elapsed.TotalSeconds:0.0}s";
+
+            var folders = results.Where(r => r.IsSuccess && File.Exists(r.TargetPath))
+                                 .Select(r => Path.GetDirectoryName(r.TargetPath)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            string? folder = folders.Count == 1 ? folders[0] : null;
+
+            var summaryToast = toast is { IsClosed: false } ? toast : new ToastNotificationWindow();
+            summaryToast.ShowBatchResult(ok == total, title, subtitle, metrics, folder);
+        }
+
+        /// <summary>Conversions and tools (and packing or protecting an archive) get a progress row; other actions are instant.</summary>
+        private static bool ShowsProgress(WheelItem option) => option.Mode != WheelMode.Actions || option.Id is "act_zip" or "act_protect";
+
+        private static string ProgressTitle(WheelItem option, int count)
+        {
+            string files = count > 1 ? $" {count} files" : "";
+            return option.Id == ConversionEngine.CompressToolId ? $"Compressing{files}…"
+                 : option.Id == "act_zip" ? (count > 1 ? $"Creating {count} archives…" : "Creating archive…")
+                 : option.Id == "act_protect" ? $"Protecting{files}…"
+                 : option.Mode == WheelMode.Convert ? $"Converting{files} to {option.Title}…"
+                 : count > 1 ? $"{option.Title}: {count} files…" : $"{option.Title}…";
+        }
+
+        private static ConversionJob NewPlaceholder(string filePath, WheelItem option) => new()
+        {
+            SourcePath = filePath, Option = option, TargetFormat = option.Title, IsRunning = true, IsQueued = true,
+            Cancellation = new System.Threading.CancellationTokenSource()
+        };
+
+        /// <summary>Waits for a queue slot, then runs the job; a cancelled wait comes back as a cancelled job.</summary>
+        private async Task<ConversionJob> RunQueuedAsync(ConversionJob running, ToolParameters? parameters, IProgress<double>? progress, Action? onStarted = null)
+        {
+            var token = running.Cancellation!.Token;
+            try
+            {
+                using var slot = await JobQueue.EnterAsync(running.SourcePath, token);
+                running.IsQueued = false;
+                onStarted?.Invoke();
+                return await _engine.ExecuteAsync(running.SourcePath, running.Option, _settingsService.Current, parameters, progress, token);
+            }
+            catch (OperationCanceledException)
+            {
+                return new ConversionJob { SourcePath = running.SourcePath, Option = running.Option, TargetFormat = running.TargetFormat,
+                                           ErrorMessage = ConversionEngine.CancelledMessage, EndTime = DateTime.Now };
+            }
+        }
+
+        /// <summary>Puts the finished job where its running placeholder was (or on top).</summary>
+        private void ReplacePlaceholder(ConversionJob? running, ConversionJob job)
+        {
+            int index = running != null ? _history.IndexOf(running) : -1;
+            if (index >= 0) _history[index] = job;
+            else _history.Insert(0, job);
+            EmptyHistoryNotice.Visibility = Visibility.Collapsed;
+            UpdateCancelAllButton();
+        }
+
+        private void UpdateCancelAllButton()
+        {
+            int running = _history.Count(j => j.IsRunning && j.Cancellation != null);
+            CancelAllButton.Visibility = running > 1 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void OnCancelHistoryJobClick(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button { Tag: ConversionJob job }) job.Cancel();
+        }
+
+        private void OnCancelAllClick(object sender, RoutedEventArgs e)
+        {
+            foreach (var job in _history.Where(j => j.IsRunning).ToList()) job.Cancel();
+        }
+
+        /// <summary>
+        /// Shows the input dialog for tools that need more than one click. Returns false if the user cancelled.
+        /// <paramref name="dragged"/> is everything that was dropped (Merge starts with those PDFs).
+        /// </summary>
+        private bool TryCollectToolParameters(string filePath, WheelItem option, IReadOnlyList<string>? dragged, out ToolParameters? parameters)
         {
             parameters = null;
 
@@ -359,9 +551,9 @@ namespace OgConverter
 
                 case "tool_pdf_merge":
                 {
-                    // Pre-fill with the other PDFs selected in Explorer, keeping the dragged file first
+                    // Pre-fill with the other dragged PDFs, or else those selected in Explorer, keeping the dragged file first
                     var files = new List<string> { filePath };
-                    var selection = ShellSelectionService.GetSelectedOrFocusedFiles();
+                    var selection = dragged is { Count: > 1 } ? dragged.ToList() : ShellSelectionService.GetSelectedOrFocusedFiles();
                     if (selection.Exists(p => string.Equals(p, filePath, StringComparison.OrdinalIgnoreCase)))
                     {
                         files.AddRange(selection.Where(p => !string.Equals(p, filePath, StringComparison.OrdinalIgnoreCase)));

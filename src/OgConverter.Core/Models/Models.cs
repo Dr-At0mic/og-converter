@@ -264,7 +264,35 @@ namespace OgConverter.Models
         /// <summary>False until the first report: the work can't be measured (yet), so show activity instead of a percentage.</summary>
         public bool HasProgress { get; private set; }
 
-        public string ProgressText => HasProgress ? $"{Progress * 100:0}%" : "Working…";
+        private bool _isQueued;
+        /// <summary>Running placeholder still waiting for a free slot in the job queue.</summary>
+        public bool IsQueued
+        {
+            get => _isQueued;
+            set
+            {
+                _isQueued = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsQueued)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ProgressText)));
+            }
+        }
+
+        /// <summary>Stops a running placeholder's work (Cancel in Recent activity or the batch toast).</summary>
+        public System.Threading.CancellationTokenSource? Cancellation { get; init; }
+
+        /// <summary>Cancel was pressed; FFmpeg stops at once, other work finishes first.</summary>
+        public bool IsCancelling => Cancellation?.IsCancellationRequested == true;
+
+        /// <summary>Requests cancellation and updates the progress text.</summary>
+        public void Cancel()
+        {
+            if (Cancellation == null || Cancellation.IsCancellationRequested) return;
+            try { Cancellation.Cancel(); } catch (ObjectDisposedException) { return; }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsCancelling)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ProgressText)));
+        }
+
+        public string ProgressText => IsCancelling ? "Cancelling…" : IsQueued ? "Waiting…" : HasProgress ? $"{Progress * 100:0}%" : "Working…";
         public ToolParameters? Parameters { get; set; }
         public string SourcePath { get; set; } = string.Empty;
         public string TargetPath { get; set; } = string.Empty;

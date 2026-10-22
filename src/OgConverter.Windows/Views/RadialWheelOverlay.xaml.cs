@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -58,9 +59,11 @@ namespace OgConverter.Views
             public uint dwFlags;
         }
 
-        public event Action<string, WheelItem>? FileActionRequested;
+        /// <summary>An option was picked for the dragged files (the wheel shows the first file's options).</summary>
+        public event Action<IReadOnlyList<string>, WheelItem>? FileActionRequested;
 
         private string? _currentFilePath;
+        private IReadOnlyList<string> _currentFiles = Array.Empty<string>();
         private WheelMode _currentMode = WheelMode.Convert;
         private string _convertKey = "Shift";
         private double _scale = 1.0;
@@ -176,7 +179,7 @@ namespace OgConverter.Views
         /// Opens the wheel centered on <paramref name="screenPoint"/>, in physical screen pixels (what the
         /// low-level hooks report).
         /// </summary>
-        public void ShowAt(Point screenPoint, WheelMode mode, string? initialFile = null)
+        public void ShowAt(Point screenPoint, WheelMode mode, IReadOnlyList<string>? initialFiles = null)
         {
             if (IsVisible)
             {
@@ -192,13 +195,8 @@ namespace OgConverter.Views
             WheelCanvas.PlaySounds = true;
             UpdateBadges();
 
-            string? activeFile = initialFile;
-            if (string.IsNullOrEmpty(activeFile))
-            {
-                activeFile = ShellSelectionService.GetActiveFile();
-            }
-
-            if (!string.IsNullOrEmpty(activeFile)) SetCurrentFile(activeFile);
+            if (initialFiles is { Count: > 0 }) SetCurrentFiles(initialFiles);
+            else if (ShellSelectionService.GetActiveFile() is { Length: > 0 } activeFile) SetCurrentFile(activeFile);
             else ShowNoFile();
 
             // Hidden until it's in place: Show() first appears wherever the window was last time.
@@ -283,20 +281,20 @@ namespace OgConverter.Views
             if (!IsVisible) return;
 
             int selectedIdx = WheelCanvas.HoveredIndex;
-            string? file = _currentFilePath;
+            IReadOnlyList<string> files = _currentFiles;
 
-            if (string.IsNullOrEmpty(file))
+            if (files.Count == 0 && ShellSelectionService.GetActiveFile() is { Length: > 0 } activeFile)
             {
-                file = ShellSelectionService.GetActiveFile();
+                files = new[] { activeFile };
             }
 
             Dismiss();
 
-            if (!string.IsNullOrEmpty(file) && selectedIdx >= 0 && selectedIdx < WheelCanvas.Items.Count)
+            if (files.Count > 0 && selectedIdx >= 0 && selectedIdx < WheelCanvas.Items.Count)
             {
                 SoundService.Instance.Play(UiSound.Select);
                 var selectedOption = WheelCanvas.Items[selectedIdx];
-                FileActionRequested?.Invoke(file, selectedOption);
+                FileActionRequested?.Invoke(files, selectedOption);
             }
         }
 
@@ -306,6 +304,7 @@ namespace OgConverter.Views
             {
                 Hide();
                 _currentFilePath = null;
+                _currentFiles = Array.Empty<string>();
                 WheelCanvas.HoveredIndex = -1;
             }
         }
@@ -316,12 +315,17 @@ namespace OgConverter.Views
             WheelCanvas.CurrentMode = newMode;
             UpdateBadges();
 
-            if (!string.IsNullOrEmpty(_currentFilePath)) SetCurrentFile(_currentFilePath);
+            if (_currentFiles.Count > 0) SetCurrentFiles(_currentFiles);
             else ShowNoFile();
         }
 
-        public void SetCurrentFile(string filePath)
+        public void SetCurrentFile(string filePath) => SetCurrentFiles(new[] { filePath });
+
+        /// <summary>Shows the first file's options; the pick is applied to every file it suits.</summary>
+        public void SetCurrentFiles(IReadOnlyList<string> files)
         {
+            string filePath = files[0];
+            _currentFiles = files;
             _currentFilePath = filePath;
             var items = FormatRegistry.GetWheelItems(filePath, _currentMode);
             WheelCanvas.Items = items;
@@ -334,12 +338,15 @@ namespace OgConverter.Views
                 WheelMode.Actions => "Choose an action",
                 _ => "Choose an option"
             };
+            // The hub has room for a short line only: the file count replaces the prompt
+            if (files.Count > 1 && items.Count > 0) hint = files.Count == 2 ? "+1 more file" : $"+{files.Count - 1} more files";
             WheelCanvas.SetFile(filePath, hint);
         }
 
         private void ShowNoFile()
         {
             _currentFilePath = null;
+            _currentFiles = Array.Empty<string>();
             WheelCanvas.Items = FormatRegistry.GetWheelItems(null, _currentMode);
             WheelCanvas.SetMessage("", "Drop a file here", $"Or drag one from Explorer or your editor and tap {FormatKeyText(_convertKey)}");
         }
@@ -378,7 +385,7 @@ namespace OgConverter.Views
             _dragHasFile = files.Count > 0;
             if (_dragHasFile)
             {
-                SetCurrentFile(files[0]);
+                SetCurrentFiles(files);
                 e.Effects = DragDropEffects.Copy;
                 e.Handled = true;
             }
@@ -407,7 +414,11 @@ namespace OgConverter.Views
         private void OnDrop(object sender, DragEventArgs e)
         {
             var files = DroppedFiles.GetPaths(e.Data);
-            if (files.Count > 0) _currentFilePath = files[0];
+            if (files.Count > 0)
+            {
+                _currentFiles = files;
+                _currentFilePath = files[0];
+            }
             _dragHasFile = false;
 
             HandleMouseDrop();

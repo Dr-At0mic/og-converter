@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -36,8 +37,8 @@ namespace OgConverter.Views
         private readonly DispatcherTimer _timer;
         private Point _cursor;
 
-        /// <summary>A file drag reached the probe: open <c>mode</c>'s wheel at the cursor for this path.</summary>
-        public event Action<WheelMode, Point, string>? FileDragConfirmed;
+        /// <summary>A file drag reached the probe: open <c>mode</c>'s wheel at the cursor for these paths.</summary>
+        public event Action<WheelMode, Point, IReadOnlyList<string>>? FileDragConfirmed;
 
         /// <summary>The wheel to open; follows the last wheel key tapped while waiting.</summary>
         public WheelMode Mode { get; set; }
@@ -126,7 +127,7 @@ namespace OgConverter.Views
             WheelMode mode = Mode;
             Point at = _cursor;
             // Opened after this callback returns, so the drag loop moves on to the wheel window
-            Dispatcher.BeginInvoke(DispatcherPriority.Input, () => FileDragConfirmed?.Invoke(mode, at, paths[0]));
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, () => FileDragConfirmed?.Invoke(mode, at, paths));
         }
 
         [StructLayout(LayoutKind.Sequential)]

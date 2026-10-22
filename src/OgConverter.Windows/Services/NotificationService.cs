@@ -16,14 +16,17 @@ namespace OgConverter.Services
             });
         }
 
-        /// <summary>A toast with a progress bar for long-running work; update it with ReportProgress.</summary>
-        public ToastNotificationWindow? ShowProgress(string title, string sourcePath)
+        /// <summary>
+        /// A toast with a progress bar for long-running work; update it with ReportProgress (or ReportBatch).
+        /// With <paramref name="onCancel"/>, it has a Cancel button.
+        /// </summary>
+        public ToastNotificationWindow? ShowProgress(string title, string sourcePath, System.Action? onCancel = null)
         {
             ToastNotificationWindow? toast = null;
             Application.Current?.Dispatcher?.Invoke(() =>
             {
                 toast = new ToastNotificationWindow();
-                toast.ShowProgress(title, sourcePath);
+                toast.ShowProgress(title, sourcePath, onCancel);
             });
             return toast;
         }

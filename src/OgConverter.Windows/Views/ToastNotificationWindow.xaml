@@ -59,6 +59,7 @@
 
             <!-- Actions -->
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="10,0,0,0">
+                <Button x:Name="CancelBtn" Content="Cancel" Click="OnCancelClick" Padding="12,4" FontSize="12" Margin="0,0,4,0" Visibility="Collapsed" />
                 <Button x:Name="OpenFileBtn" Style="{StaticResource AccentButton}" Content="Open" Click="OnOpenFileClick" Padding="12,4" FontSize="12" Margin="0,0,4,0" />
                 <Button Style="{StaticResource IconButton}" Content="&#xE8BB;" Click="OnCloseClick" Width="26" Height="26" FontSize="10" ToolTip="Dismiss" />
             </StackPanel>

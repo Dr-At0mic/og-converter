@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using OgConverter.Models;
 
@@ -71,8 +72,12 @@ namespace OgConverter.Services
             return null;
         }
 
+        /// <summary>
+        /// Runs one wheel option on one file. <paramref name="cancellationToken"/> stops FFmpeg work (and removes its
+        /// half-written output); other work is short and runs to the end.
+        /// </summary>
         public async Task<ConversionJob> ExecuteAsync(string sourcePath, WheelItem item, AppSettings settings, ToolParameters? parameters = null,
-            IProgress<double>? progress = null)
+            IProgress<double>? progress = null, CancellationToken cancellationToken = default)
         {
             var job = new ConversionJob
             {
@@ -97,8 +102,12 @@ namespace OgConverter.Services
 
             job.OriginalSizeBytes = isDirectory ? 0 : new FileInfo(sourcePath).Length;
 
+            using var cancelScope = MediaToolkit.CancelWith(cancellationToken);
+            var reserved = new List<string>();
+            ReservedTargets.Value = reserved;
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 switch (item.Mode)
                 {
                     case WheelMode.Convert:
@@ -112,6 +121,11 @@ namespace OgConverter.Services
                         break;
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                job.IsSuccess = false;
+                job.ErrorMessage = CancelledMessage;
+            }
             catch (Exception ex)
             {
                 job.IsSuccess = false;
@@ -119,6 +133,7 @@ namespace OgConverter.Services
             }
             finally
             {
+                lock (InUseTargets) InUseTargets.ExceptWith(reserved);
                 job.EndTime = DateTime.Now;
                 // An existing target only means success if nothing failed (actions start with target = source)
                 if (job.ErrorMessage == null && File.Exists(job.TargetPath))
@@ -1094,17 +1109,34 @@ namespace OgConverter.Services
             string cleanExt = targetExt.TrimStart('.');
             string candidate = Path.Combine(dir, $"{baseName}.{cleanExt}");
 
-            if (settings.OverwriteExisting) return candidate;
-
-            int counter = 1;
-            while (File.Exists(candidate))
+            // Jobs run in parallel: a name another running job picked isn't on disk yet (or is half-written), so it's
+            // skipped even when overwriting, or "clip.mov" and "clip.mkv" → MP4 would both write "clip.mp4"
+            var own = ReservedTargets.Value;
+            lock (InUseTargets)
             {
-                candidate = Path.Combine(dir, $"{baseName}_{counter}.{cleanExt}");
-                counter++;
+                int counter = 1;
+                while ((!settings.OverwriteExisting && File.Exists(candidate)) ||
+                       (InUseTargets.Contains(candidate) && own?.Contains(candidate, StringComparer.OrdinalIgnoreCase) != true))
+                {
+                    candidate = Path.Combine(dir, $"{baseName}_{counter}.{cleanExt}");
+                    counter++;
+                }
+
+                // Outside ExecuteAsync (no job to release it) nothing is reserved
+                if (own != null && InUseTargets.Add(candidate)) own.Add(candidate);
             }
 
             return candidate;
         }
+
+        /// <summary>Error message of a job stopped by its cancellation token.</summary>
+        public const string CancelledMessage = "Cancelled.";
+
+        /// <summary>Output paths picked by jobs still running, so parallel jobs never get the same one.</summary>
+        private static readonly HashSet<string> InUseTargets = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The running job's own reservations, released when it ends.</summary>
+        private static readonly System.Threading.AsyncLocal<List<string>?> ReservedTargets = new();
 
 
         /// <summary>Computes the SHA-256 of the source, copies it, and records it as the job's visible result.</summary>

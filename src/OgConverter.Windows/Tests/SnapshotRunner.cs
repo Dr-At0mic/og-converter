@@ -60,6 +60,9 @@ namespace OgConverter.Tests
             overlay.SwitchMode(WheelMode.Convert);
             overlay.SetCurrentFile(pdf);
             Save((FrameworkElement)overlay.Content, Path.Combine(outDir, "wheel_idle_light.png"), Color.FromRgb(0xF3, 0xF4, 0xF6));
+            overlay.SetCurrentFiles(new[] { pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf });
+            Save((FrameworkElement)overlay.Content, Path.Combine(outDir, "wheel_batch_light.png"), Color.FromRgb(0xF3, 0xF4, 0xF6));
+            overlay.SetCurrentFile(pdf);
 
             // Office document wheels
             foreach (string doc in new[] { "Proposal.docx", "Budget 2026.xlsx", "Pitch.pptx" })
@@ -76,6 +79,9 @@ namespace OgConverter.Tests
             overlay.SwitchMode(WheelMode.Actions);
             overlay.SetCurrentFile(pdf);
             Save((FrameworkElement)overlay.Content, Path.Combine(outDir, "wheel_60_idle.png"), Color.FromRgb(0xF3, 0xF4, 0xF6));
+            overlay.SetCurrentFiles(new[] { pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf, pdf });
+            Save((FrameworkElement)overlay.Content, Path.Combine(outDir, "wheel_60_batch.png"), Color.FromRgb(0xF3, 0xF4, 0xF6));
+            overlay.SetCurrentFile(pdf);
             overlay.WheelCanvas.HoveredIndex = 6;
             Save((FrameworkElement)overlay.Content, Path.Combine(outDir, "wheel_60_hover.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
             overlay.SwitchMode(WheelMode.Tools);
@@ -284,6 +290,15 @@ namespace OgConverter.Tests
             Save((FrameworkElement)toast.Content, Path.Combine(outDir, "toast_failure.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
             toast.Close();
 
+            // Batch: one toast for every file, with Cancel while it runs
+            toast = new ToastNotificationWindow();
+            toast.ShowProgress("Converting 10 files to MP4…", pdf, () => { });
+            toast.ReportBatch("Converting 10 files to MP4…", "4 of 10 done  ·  2 running  ·  1 failed", 0.47);
+            Save((FrameworkElement)toast.Content, Path.Combine(outDir, "toast_batch_progress.png"), Color.FromRgb(0xF3, 0xF4, 0xF6));
+            toast.ShowBatchResult(false, "8 of 10 files converted to MP4", "1 failed  ·  1 cancelled", "video_03.mov: FFmpeg failed (exit code 1): Invalid data found when processing input", outDir);
+            Save((FrameworkElement)toast.Content, Path.Combine(outDir, "toast_batch_partial.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
+            toast.Close();
+
             // Home with history and a loaded playground
             main.Show();
             main.Width = 1080; main.Height = 720;
@@ -296,6 +311,22 @@ namespace OgConverter.Tests
             main.EmptyHistoryNotice.Visibility = Visibility.Collapsed;
             main.TabOverview.IsChecked = true;
             Save((FrameworkElement)main.Content, Path.Combine(outDir, "main_overview_history.png"), null);
+
+            // A batch in Recent activity: running, waiting for a slot, and being cancelled
+            var mp4Item = new WheelItem { Title = "MP4", Mode = WheelMode.Convert };
+            var cancelling = new ConversionJob { SourcePath = Path.Combine(outDir, "video_04.mov"), Option = mp4Item, TargetFormat = "MP4", IsRunning = true, Cancellation = new System.Threading.CancellationTokenSource() };
+            var queued = new ConversionJob { SourcePath = Path.Combine(outDir, "video_03.mov"), Option = mp4Item, TargetFormat = "MP4", IsRunning = true, IsQueued = true, Cancellation = new System.Threading.CancellationTokenSource() };
+            var running2 = new ConversionJob { SourcePath = Path.Combine(outDir, "video_02.mov"), Option = mp4Item, TargetFormat = "MP4", IsRunning = true, Cancellation = new System.Threading.CancellationTokenSource() };
+            var running1 = new ConversionJob { SourcePath = Path.Combine(outDir, "video_01.mov"), Option = mp4Item, TargetFormat = "MP4", IsRunning = true, Cancellation = new System.Threading.CancellationTokenSource() };
+            running1.Progress = 0.62;
+            running2.Progress = 0.18;
+            cancelling.Progress = 0.3;
+            cancelling.Cancel();
+            foreach (var j in new[] { cancelling, queued, running2, running1 }) history.Insert(0, j);
+            main.CancelAllButton.Visibility = Visibility.Visible;
+            Save((FrameworkElement)main.Content, Path.Combine(outDir, "main_overview_batch.png"), null);
+            foreach (var j in new[] { cancelling, queued, running2, running1 }) history.Remove(j);
+            main.CancelAllButton.Visibility = Visibility.Collapsed;
 
             main.LoadFileIntoPlayground(pdf);
             main.PlaygroundWheel.HoveredIndex = 2;

@@ -317,7 +317,11 @@
 
                             <Grid Grid.Row="0" Margin="20,0,14,10">
                                 <TextBlock Text="Recent activity" Style="{StaticResource H2}" VerticalAlignment="Center" />
-                                <Button Style="{StaticResource GhostButton}" Content="Clear" Click="OnClearHistoryClick" HorizontalAlignment="Right" FontSize="12" />
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button x:Name="CancelAllButton" Style="{StaticResource GhostButton}" Content="Cancel all" Click="OnCancelAllClick" FontSize="12"
+                                            ToolTip="Stop every job that's waiting or running" Visibility="Collapsed" Margin="0,0,4,0" />
+                                    <Button Style="{StaticResource GhostButton}" Content="Clear" Click="OnClearHistoryClick" FontSize="12" />
+                                </StackPanel>
                             </Grid>
 
                             <ListBox x:Name="HistoryList" Grid.Row="1" Background="Transparent" Foreground="{DynamicResource TextPrimaryBrush}" BorderThickness="0" Padding="8,0"
@@ -351,7 +355,7 @@
                                                     <Grid x:Name="progressPanel" Margin="0,6,0,0" Visibility="Collapsed">
                                                         <Grid.ColumnDefinitions>
                                                             <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="44" />
+                                                            <ColumnDefinition Width="64" />
                                                         </Grid.ColumnDefinitions>
                                                         <Grid Height="3" VerticalAlignment="Center" ClipToBounds="True">
                                                             <Border Background="{DynamicResource BorderStrongBrush}" CornerRadius="1.5" />
@@ -382,6 +386,8 @@
                                                     <Button Style="{StaticResource IconButton}" Content="&#xE8A7;" Tag="{Binding TargetPath}" Click="OnOpenHistoryFileClick" ToolTip="Open" Width="28" Height="28" FontSize="12" />
                                                     <Button Style="{StaticResource IconButton}" Content="&#xE838;" Tag="{Binding TargetPath}" Click="OnOpenHistoryFolderClick" ToolTip="Show in Explorer" Width="28" Height="28" FontSize="12" />
                                                 </StackPanel>
+                                                <Button x:Name="rowCancel" Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE711;" Tag="{Binding}" Click="OnCancelHistoryJobClick"
+                                                        ToolTip="Cancel" Width="28" Height="28" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0" Visibility="Collapsed" />
                                             </Grid>
                                         </Border>
                                         <DataTemplate.Triggers>
@@ -401,6 +407,7 @@
                                                 <Setter TargetName="error" Property="Visibility" Value="Collapsed" />
                                                 <Setter TargetName="detail" Property="Visibility" Value="Collapsed" />
                                                 <Setter TargetName="rowActions" Property="Visibility" Value="Collapsed" />
+                                                <Setter TargetName="rowCancel" Property="Visibility" Value="Visible" />
                                                 <Setter TargetName="progressPanel" Property="Visibility" Value="Visible" />
                                             </DataTrigger>
                                             <MultiDataTrigger>
@@ -423,6 +430,10 @@
                                                     <StopStoryboard BeginStoryboardName="sweep" />
                                                 </MultiDataTrigger.ExitActions>
                                             </MultiDataTrigger>
+                                            <!-- Waiting for a queue slot: an empty bar, not the "working" sweep -->
+                                            <DataTrigger Binding="{Binding IsQueued}" Value="True">
+                                                <Setter TargetName="progressSweep" Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
                                             <Trigger Property="IsMouseOver" Value="True">
                                                 <Setter TargetName="row" Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
                                                 <Setter TargetName="rowActions" Property="Opacity" Value="1" />

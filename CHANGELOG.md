@@ -5,6 +5,22 @@ What changed in each release. The release workflow copies a version's section in
 
 Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fails if it's missing.
 
+## [1.7.0]
+
+- **Convert many files at once**: select several files, drag them and tap the wheel key. The option you pick runs on every file it
+  suits (the wheel shows "+N more files"); files it doesn't suit are listed in Recent activity with the reason.
+- **Runs a few at a time**: videos convert 2 at once (3 on PCs with 16 or more threads) and lighter files up to 4 at once, so a big
+  batch finishes sooner without freezing the PC. The rest show "Waiting…" until a slot frees up.
+- **One notification for the batch**: "4 of 10 done · 2 running · 1 failed" with an overall progress bar, then a summary with the
+  first problem and **Open folder**.
+- **Cancel**: a **Cancel** button on the progress notification, a **×** on each running file in Recent activity, and **Cancel all**
+  while several run. Video and audio work stops at once and the half-written file is removed.
+- Compress asks for its settings once per kind of file in a batch, and Zip once; Crop, Trim and the other tools still ask for each
+  file. Dragging several PDFs and choosing **Merge** starts the merge with all of them.
+- Two files that would get the same output name (for example `clip.mov` and `clip.mkv` to MP4) no longer overwrite each other.
+- Fixed: a finished conversion's notification could briefly show "100%" instead of its result.
+- Linux (beta) still converts one file per drag; batches come to Linux in a later release.
+
 ## [1.6.1]
 
 - **The wheel only opens for file and folder drags**: holding the left mouse button in a game (or selecting text, or moving a window)

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OgConverter.Services
@@ -31,8 +32,30 @@ namespace OgConverter.Services
     /// <summary>Runs FFmpeg with progress reporting, probes media, and detects which encoders actually work.</summary>
     public static class MediaToolkit
     {
+        private static readonly AsyncLocal<CancellationToken> Cancellation = new();
+
+        /// <summary>
+        /// Makes every FFmpeg run started from the calling async flow (until disposed) stop when
+        /// <paramref name="cancellationToken"/> is cancelled. Set once per job, so the many FFmpeg call sites
+        /// (convert, compress, crop, trim…) don't each need a token parameter.
+        /// </summary>
+        public static IDisposable CancelWith(CancellationToken cancellationToken)
+        {
+            var previous = Cancellation.Value;
+            Cancellation.Value = cancellationToken;
+            return new Restore(previous);
+        }
+
+        private sealed class Restore : IDisposable
+        {
+            private readonly CancellationToken _previous;
+            public Restore(CancellationToken previous) => _previous = previous;
+            public void Dispose() => Cancellation.Value = _previous;
+        }
+
         public static async Task<MediaInfo> ProbeAsync(string ffmpeg, string path)
         {
+            Cancellation.Value.ThrowIfCancellationRequested();
             var psi = new ProcessStartInfo(ffmpeg)
             {
                 UseShellExecute = false,
@@ -120,8 +143,18 @@ namespace OgConverter.Services
             foreach (var a in new[] { "-hide_banner", "-nostdin", "-y", "-progress", "pipe:1", "-nostats" }) psi.ArgumentList.Add(a);
             foreach (var a in args) psi.ArgumentList.Add(a);
 
+            var cancellationToken = Cancellation.Value;
+            cancellationToken.ThrowIfCancellationRequested();
+
             using var p = new Process { StartInfo = psi };
             p.Start();
+
+            // Cancelling kills FFmpeg; the pipes then close, so the reads below finish
+            bool killed = false;
+            using var onCancel = cancellationToken.Register(() =>
+            {
+                try { p.Kill(entireProcessTree: true); killed = true; } catch { }
+            });
 
             // Keep only the end of the log; that's where FFmpeg explains a failure
             var log = new StringBuilder();
@@ -148,10 +181,31 @@ namespace OgConverter.Services
 
             await errTask;
             await p.WaitForExitAsync();
+            if (killed || cancellationToken.IsCancellationRequested)
+            {
+                DeletePartialOutput(psi.ArgumentList);
+                throw new OperationCanceledException(cancellationToken);
+            }
             if (p.ExitCode != 0)
             {
                 throw new InvalidOperationException($"FFmpeg failed (exit code {p.ExitCode}): {SummarizeError(log.ToString())}");
             }
+        }
+
+        /// <summary>
+        /// Removes the half-written file of a cancelled run: FFmpeg's output is its last argument. Never an input
+        /// (<c>-i</c>), and only real file paths (not pipes or <c>%03d</c> patterns).
+        /// </summary>
+        private static void DeletePartialOutput(IList<string> args)
+        {
+            if (args.Count < 2) return;
+            string output = args[^1];
+            if (!Path.IsPathRooted(output) || output.Contains('%')) return;
+            for (int i = 0; i < args.Count - 1; i++)
+            {
+                if (args[i] == "-i" && string.Equals(args[i + 1], output, StringComparison.OrdinalIgnoreCase)) return;
+            }
+            try { if (File.Exists(output)) File.Delete(output); } catch { }
         }
 
         /// <summary>The last few meaningful lines of an FFmpeg log.</summary>

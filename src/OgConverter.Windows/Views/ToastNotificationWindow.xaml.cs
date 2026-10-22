@@ -13,6 +13,7 @@ namespace OgConverter.Views
     {
         private string? _targetPath;
         private DispatcherTimer? _autoCloseTimer;
+        private Action? _onCancel;
 
         /// <summary>True once dismissed; a closed window can't be shown again.</summary>
         public bool IsClosed { get; private set; }
@@ -30,9 +31,15 @@ namespace OgConverter.Views
             StatusBg.Background = (System.Windows.Media.Brush)FindResource(backgroundKey);
         }
 
-        /// <summary>Shows a "working" toast that stays up until <see cref="ShowJob"/> replaces it with the result.</summary>
-        public void ShowProgress(string title, string sourcePath)
+        /// <summary>
+        /// Shows a "working" toast that stays up until <see cref="ShowJob"/> or <see cref="ShowBatchResult"/>
+        /// replaces it with the result. With <paramref name="onCancel"/>, it has a Cancel button.
+        /// </summary>
+        public void ShowProgress(string title, string sourcePath, Action? onCancel = null)
         {
+            _onCancel = onCancel;
+            CancelBtn.Visibility = onCancel != null ? Visibility.Visible : Visibility.Collapsed;
+            CancelBtn.IsEnabled = true;
             SetStatus("", "ModeToolsBrush", "AccentSubtleBrush");
             TitleText.Text = title;
             SubtitleText.Text = Path.GetFileName(sourcePath);
@@ -57,11 +64,58 @@ namespace OgConverter.Views
         {
             Dispatcher.BeginInvoke(() =>
             {
-                if (!IsVisible) return;
+                // A report queued just before the result arrived must not overwrite it
+                if (!IsVisible || ProgressTrack.Visibility != Visibility.Visible) return;
                 if (ProgressSweep.Visibility == Visibility.Visible) SetSweep(false);
                 ProgressScale.ScaleX = Math.Clamp(fraction, 0, 1);
                 MetricsText.Text = $"{fraction * 100:0}%";
             });
+        }
+
+        /// <summary>Batch progress: the subtitle carries the counts, the bar the overall fraction (0–1).</summary>
+        public void ReportBatch(string title, string subtitle, double fraction)
+        {
+            if (!IsVisible || ProgressTrack.Visibility != Visibility.Visible) return;
+            TitleText.Text = title;
+            SubtitleText.Text = subtitle;
+            ReportProgress(fraction);
+        }
+
+        /// <summary>Replaces a batch's progress toast with its summary; Open shows <paramref name="folder"/>.</summary>
+        public void ShowBatchResult(bool allSucceeded, string title, string subtitle, string metrics, string? folder)
+        {
+            _targetPath = folder;
+            HideRunningParts();
+            if (allSucceeded) SetStatus("", "SuccessBrush", "SuccessSubtleBrush");
+            else SetStatus("", "WarningBrush", "WarningSubtleBrush");
+            TitleText.Text = title;
+            SubtitleText.Text = subtitle;
+            SubtitleText.ToolTip = subtitle;
+            MetricsText.Text = metrics;
+            MetricsText.ToolTip = metrics;
+            OpenFileBtn.Content = "Open folder";
+            OpenFileBtn.Visibility = folder != null && Directory.Exists(folder) ? Visibility.Visible : Visibility.Collapsed;
+            PlaceAndShow();
+            StartAutoClose(6);
+        }
+
+        private void HideRunningParts()
+        {
+            SetSweep(false);
+            ProgressTrack.Visibility = Visibility.Collapsed;
+            CancelBtn.Visibility = Visibility.Collapsed;
+            _onCancel = null;
+        }
+
+        private void StartAutoClose(double seconds)
+        {
+            _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds) };
+            _autoCloseTimer.Tick += (s, e) =>
+            {
+                _autoCloseTimer.Stop();
+                Close();
+            };
+            _autoCloseTimer.Start();
         }
 
         private void PlaceAndShow()
@@ -75,8 +129,7 @@ namespace OgConverter.Views
         public void ShowJob(ConversionJob job)
         {
             _targetPath = job.TargetPath;
-            SetSweep(false);
-            ProgressTrack.Visibility = Visibility.Collapsed;
+            HideRunningParts();
 
             if (job.IsSuccess)
             {
@@ -109,14 +162,14 @@ namespace OgConverter.Views
 
             // Position at bottom-right of primary screen
             PlaceAndShow();
+            StartAutoClose(4.5);
+        }
 
-            _autoCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4.5) };
-            _autoCloseTimer.Tick += (s, e) =>
-            {
-                _autoCloseTimer.Stop();
-                Close();
-            };
-            _autoCloseTimer.Start();
+        private void OnCancelClick(object sender, RoutedEventArgs e)
+        {
+            _onCancel?.Invoke();
+            CancelBtn.IsEnabled = false;
+            MetricsText.Text = "Cancelling…";
         }
 
         private void OnOpenFileClick(object sender, RoutedEventArgs e)

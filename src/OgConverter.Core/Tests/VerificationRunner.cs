@@ -68,6 +68,7 @@ namespace OgConverter.Tests
                     if (Array.IndexOf(only, "markdown") >= 0) await MarkdownVerification.RunAsync(quick, quickSettings, tempDir, testPng);
                     if (Array.IndexOf(only, "everyday") >= 0) await EverydayVerification.RunAsync(quick, quickSettings, tempDir, platform);
                     if (Array.IndexOf(only, "archive") >= 0) await ArchiveVerification.RunAsync(quick, quickSettings, tempDir, testPng);
+                    if (Array.IndexOf(only, "batch") >= 0) await BatchVerification.RunAsync(quick, quickSettings, tempDir);
                     if (Array.IndexOf(only, "protection") >= 0)
                     {
                         string pdf = Path.Combine(tempDir, "protect_input.pdf");
@@ -256,6 +257,7 @@ namespace OgConverter.Tests
                 await RunOrSkipAsync("drag sources", platform.DragDrop, f => { f(tempDir); return Task.CompletedTask; });
                 await MarkdownVerification.RunAsync(engine, settings, tempDir, testPng);
                 await EverydayVerification.RunAsync(engine, settings, tempDir, platform);
+                await BatchVerification.RunAsync(engine, settings, tempDir);
 
                 Console.WriteLine("=== ALL VERIFICATION TESTS PASSED SUCCESSFULLY ===");
             }
