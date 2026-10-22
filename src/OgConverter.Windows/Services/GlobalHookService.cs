@@ -15,7 +15,11 @@ namespace OgConverter.Services
 
         private const int WM_KEYDOWN = 0x0100;
         private const int WM_SYSKEYDOWN = 0x0104;
+        private const int WM_LBUTTONDOWN = 0x0201;
         private const int WM_LBUTTONUP = 0x0202;
+
+        private const int SM_CXDRAG = 68;
+        private const int SM_CYDRAG = 69;
 
         private const int VK_SHIFT = 0x10;
         private const int VK_LSHIFT = 0xA0;
@@ -136,6 +140,11 @@ namespace OgConverter.Services
 
         private int _lastModifierVk = 0;
 
+        // Where the left button went down (hook thread only). A drag only starts once the cursor leaves the
+        // system's drag rectangle around this point, so holding the button still (a game's fire button) never counts.
+        private bool _buttonDownSeen;
+        private POINT _buttonDownPt;
+
         private IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
         {
             if (nCode >= 0)
@@ -158,17 +167,14 @@ namespace OgConverter.Services
                         }
                         _lastModifierVk = vkCode;
 
-                        // Check if mouse left button is down (indicates an active drag)
-                        bool isDragging = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+                        // The left button is down and the cursor moved far enough to start a drag. This only says a
+                        // drag might be under way: the UI checks that it really carries files before opening the wheel.
+                        GetCursorPos(out POINT cursorPt);
+                        bool isDragging = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0 && MovedPastDragThreshold(cursorPt);
                         if (isDragging)
                         {
                             WheelMode mode = GetModeForVk(vkCode) ?? WheelMode.Convert;
-
-                            GetCursorPos(out POINT cursorPt);
                             var screenPoint = new Point(cursorPt.X, cursorPt.Y);
-
-                            // The dragged file is looked up on the UI thread: that's a COM call into Explorer,
-                            // far too slow for a hook callback
                             Post(() => TriggerWheelRequested?.Invoke(mode, screenPoint, null));
                         }
                     }
@@ -207,9 +213,15 @@ namespace OgConverter.Services
                         if (Interlocked.Exchange(ref _moveQueued, 1) == 0) Post(FlushMouseMove);
                     }
                 }
+                else if (wParam == (IntPtr)WM_LBUTTONDOWN)
+                {
+                    _buttonDownPt = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam).pt;
+                    _buttonDownSeen = true;
+                }
                 else if (wParam == (IntPtr)WM_LBUTTONUP)
                 {
                     _lastModifierVk = 0;
+                    _buttonDownSeen = false;
                     if (TrackMouse) Post(() => MouseReleased?.Invoke());
                 }
             }
@@ -222,6 +234,17 @@ namespace OgConverter.Services
             Interlocked.Exchange(ref _moveQueued, 0);
             long packed = Interlocked.Read(ref _pendingMove);
             MouseMoved?.Invoke(new Point((int)(packed >> 32), (int)(packed & 0xFFFFFFFF)));
+        }
+
+        /// <summary>
+        /// True when the cursor is outside the drag rectangle (SM_CXDRAG × SM_CYDRAG) around where the left button went
+        /// down, the same test Explorer uses before it starts a drag.
+        /// </summary>
+        private bool MovedPastDragThreshold(POINT cursor)
+        {
+            if (!_buttonDownSeen) return false;
+            return Math.Abs(cursor.X - _buttonDownPt.X) > GetSystemMetrics(SM_CXDRAG) / 2 ||
+                   Math.Abs(cursor.Y - _buttonDownPt.Y) > GetSystemMetrics(SM_CYDRAG) / 2;
         }
 
         private WheelMode? GetModeForVk(int vk)
@@ -322,5 +345,8 @@ namespace OgConverter.Services
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool GetCursorPos(out POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int index);
     }
 }

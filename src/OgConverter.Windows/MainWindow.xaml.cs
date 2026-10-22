@@ -23,6 +23,7 @@ namespace OgConverter
         private readonly GlobalHookService _hookService;
         private readonly TrayIconService _trayService;
         private readonly RadialWheelOverlay _overlay;
+        private readonly DragProbeWindow _dragProbe;
 
         private readonly ObservableCollection<ConversionJob> _history = new();
         private string? _playgroundLoadedFile;
@@ -41,6 +42,7 @@ namespace OgConverter
             _hookService = new GlobalHookService();
             _trayService = new TrayIconService();
             _overlay = new RadialWheelOverlay();
+            _dragProbe = new DragProbeWindow();
 
             HistoryList.ItemsSource = _history;
 
@@ -144,33 +146,54 @@ namespace OgConverter
 
         private void SetupGlobalHooks()
         {
-            // Mouse traffic is only forwarded from the hook thread while the wheel is open
-            _overlay.IsVisibleChanged += (_, _) => _hookService.TrackMouse = _overlay.IsVisible;
+            // Mouse traffic is only forwarded from the hook thread while the wheel or the drag check is open
+            _overlay.IsVisibleChanged += (_, _) => _hookService.TrackMouse = _overlay.IsVisible || _dragProbe.IsVisible;
+            _dragProbe.IsVisibleChanged += (_, _) => _hookService.TrackMouse = _overlay.IsVisible || _dragProbe.IsVisible;
 
             _hookService.TriggerWheelRequested += (mode, screenPt, filePath) =>
+            {
+                // Already open: the key switches wheels
+                if (_overlay.IsVisible)
+                {
+                    _overlay.ShowAt(screenPt, mode, filePath);
+                    return;
+                }
+
+                // The button is held, but that's also a game's fire button or a text selection: the wheel waits until
+                // the drag check sees files or folders
+                if (_dragProbe.IsVisible) _dragProbe.Mode = mode;
+                else if (!DragProbeWindow.FullScreenAppInFront) _dragProbe.Begin(mode, screenPt);
+            };
+
+            _dragProbe.FileDragConfirmed += (mode, screenPt, filePath) =>
             {
                 _overlay.ShowAt(screenPt, mode, filePath);
             };
 
             _hookService.DismissWheelRequested += () =>
             {
+                _dragProbe.Cancel();
                 _overlay.Dismiss();
             };
 
             _hookService.MouseMoved += (screenPt) =>
             {
+                _dragProbe.MoveTo(screenPt);
                 _overlay.UpdateCursorPosition(screenPt);
             };
 
             _hookService.MouseReleased += () =>
             {
+                _dragProbe.Cancel();
                 _overlay.HandleMouseDrop();
             };
 
             // Hold-to-use mode: letting go of the active wheel's key cancels it
             _hookService.ShortcutReleased += (mode) =>
             {
-                if (_settingsService.Current.CloseWheelOnKeyRelease && _overlay.IsVisible && _overlay.CurrentMode == mode)
+                if (!_settingsService.Current.CloseWheelOnKeyRelease) return;
+                if (_dragProbe.IsVisible && _dragProbe.Mode == mode) _dragProbe.Cancel();
+                if (_overlay.IsVisible && _overlay.CurrentMode == mode)
                 {
                     _overlay.Dismiss();
                 }
@@ -493,6 +516,7 @@ namespace OgConverter
             _settingsService.Flush();
             _hookService.Dispose();
             _trayService.Dispose();
+            _dragProbe.Close();
             _overlay.Close();
         }
 

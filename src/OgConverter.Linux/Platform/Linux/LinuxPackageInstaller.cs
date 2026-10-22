@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using OgConverter.Services;
 
@@ -18,7 +19,7 @@ namespace OgConverter.Platform.Linux
             var manager => $"Install it with {manager.ToString().ToLowerInvariant()} in a terminal."
         };
 
-        public Task<(int ExitCode, string Output)> InstallAsync(Dependency dependency) =>
+        public Task<(int ExitCode, string Output)> InstallAsync(Dependency dependency, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException($"Install {DependencyService.DisplayName(dependency)} in a terminal: {InstallHints.Command(dependency)}");
     }
 }

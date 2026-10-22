@@ -123,7 +123,7 @@ namespace OgConverter.Tests
             Save((FrameworkElement)unlockDlg.Content, Path.Combine(outDir, "dialog_unlock.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
             unlockDlg.Close();
 
-            var extras = new ExtrasDialog(true, true, _ => Task.FromResult<string?>(null)) { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
+            var extras = new ExtrasDialog(true, true, (_, _) => Task.FromResult<string?>(null)) { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
             extras.Show();
             Save((FrameworkElement)extras.Content, Path.Combine(outDir, "dialog_extras.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
             extras.Close();

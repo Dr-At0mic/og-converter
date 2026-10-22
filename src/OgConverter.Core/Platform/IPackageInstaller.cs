@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OgConverter.Services
@@ -13,8 +14,9 @@ namespace OgConverter.Services
 
         /// <summary>
         /// Installs <paramref name="dependency"/>. Returns the installer's exit code and its last line of output; callers check
-        /// success by looking for the program again.
+        /// success by looking for the program again. Cancelling stops the package manager and throws
+        /// <see cref="System.OperationCanceledException"/>.
         /// </summary>
-        Task<(int ExitCode, string Output)> InstallAsync(Dependency dependency);
+        Task<(int ExitCode, string Output)> InstallAsync(Dependency dependency, CancellationToken cancellationToken = default);
     }
 }

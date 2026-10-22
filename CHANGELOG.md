@@ -5,6 +5,15 @@ What changed in each release. The release workflow copies a version's section in
 
 Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fails if it's missing.
 
+## [1.6.1]
+
+- **The wheel only opens for file and folder drags**: holding the left mouse button in a game (or selecting text, or moving a window)
+  and pressing Shift, Ctrl or Alt no longer opens the wheel. It now opens only when you're actually dragging files or folders
+  (from Explorer, VS Code, JetBrains IDEs and so on), and never while a full-screen game or app is in front.
+- **Recommended extras**: an install of FFmpeg or LibreOffice can now be cancelled with **Cancel install**, Esc or Alt+F4, so a hidden
+  admin prompt or a stuck download no longer leaves the window stuck. If the LibreOffice admin prompt doesn't show up, click the
+  flashing shield icon on the taskbar. Nothing needs a restart: installed helpers are picked up straight away.
+
 ## [1.6.0]
 
 - **Compress to a target file size**: in Compress › Lossy, choose **Size control › Target file size** and type the size you need

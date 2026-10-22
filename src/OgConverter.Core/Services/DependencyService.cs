@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace OgConverter.Services
@@ -175,13 +176,13 @@ namespace OgConverter.Services
         /// <summary>
         /// Installs <paramref name="d"/> with the package manager (on Windows LibreOffice installs for all users, so Windows
         /// shows its admin prompt). Returns the installer's exit code and its last line of output; callers check success by
-        /// detecting the program again.
+        /// detecting the program again. Cancelling stops the package manager and throws <see cref="OperationCanceledException"/>.
         /// </summary>
-        public static async Task<(int ExitCode, string Output)> InstallAsync(Dependency d)
+        public static async Task<(int ExitCode, string Output)> InstallAsync(Dependency d, CancellationToken cancellationToken = default)
         {
             if (d == Dependency.Guetzli && OperatingSystem.IsWindows()) return await DownloadGuetzliAsync();
             var installer = Platform.Packages ?? throw new InvalidOperationException(UnavailableHint);
-            return await installer.InstallAsync(d);
+            return await installer.InstallAsync(d, cancellationToken);
         }
 
         public static void OpenDownloadPage(Dependency d) => Platform.Desktop.OpenUrl(DownloadPage(d));

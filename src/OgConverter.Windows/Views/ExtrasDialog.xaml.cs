@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -11,16 +12,18 @@ namespace OgConverter.Views
 {
     /// <summary>
     /// First-run / post-install prompt for the free helpers that aren't on this PC: FFmpeg, and LibreOffice when
-    /// neither Microsoft Office nor LibreOffice is installed. Installs only what the user ticks.
+    /// neither Microsoft Office nor LibreOffice is installed. Installs only what the user ticks. A running install can
+    /// be cancelled (button, Esc or Alt+F4), so a hidden admin prompt or a stuck download never traps the user.
     /// </summary>
     public partial class ExtrasDialog : Window
     {
-        /// <summary>Installs one helper; returns null when it's ready, otherwise what went wrong.</summary>
-        private readonly Func<Dependency, Task<string?>> _install;
+        /// <summary>Installs one helper; returns null when it's ready, otherwise what went wrong (or that it was cancelled).</summary>
+        private readonly Func<Dependency, CancellationToken, Task<string?>> _install;
+        private CancellationTokenSource? _cts;
         private bool _busy;
         private bool _finished;
 
-        public ExtrasDialog(bool offerFFmpeg, bool offerLibreOffice, Func<Dependency, Task<string?>> install)
+        public ExtrasDialog(bool offerFFmpeg, bool offerLibreOffice, Func<Dependency, CancellationToken, Task<string?>> install)
         {
             InitializeComponent();
             _install = install;
@@ -35,7 +38,13 @@ namespace OgConverter.Views
                 ConfirmButton.Content = "Open download pages";
             }
 
-            Closing += (_, e) => e.Cancel = _busy;
+            Closing += (_, e) =>
+            {
+                // Closing mid-install cancels it; the dialog closes once the install has stopped
+                if (!_busy) return;
+                e.Cancel = true;
+                CancelInstall();
+            };
         }
 
         private async void OnConfirmClick(object sender, RoutedEventArgs e)
@@ -67,18 +76,28 @@ namespace OgConverter.Views
             }
 
             _busy = true;
+            _cts = new CancellationTokenSource();
             ConfirmButton.IsEnabled = false;
-            CancelButton.IsEnabled = false;
+            CancelButton.Content = "Cancel install";
             FFmpegCheck.IsEnabled = LibreOfficeCheck.IsEnabled = false;
 
             bool allOk = true;
             foreach (var (dep, status, _) in picked)
             {
+                if (_cts.IsCancellationRequested)
+                {
+                    allOk = false;
+                    SetStatus(status, "Skipped", "TextSecondaryBrush");
+                    continue;
+                }
+
+                // The admin prompt comes from winget, which has no window, so Windows often doesn't bring it to the front
                 SetStatus(status, dep == Dependency.LibreOffice
-                    ? "Installing… this is a large download and can take several minutes. Approve the Windows admin prompt when it appears."
+                    ? "Installing… this is a large download and can take several minutes. Approve the Windows admin prompt when it appears. " +
+                      "Don't see it? Click the flashing shield icon on the taskbar."
                     : "Installing…", "TextSecondaryBrush");
 
-                string? error = await _install(dep);
+                string? error = await _install(dep, _cts.Token);
                 if (error == null)
                 {
                     SetStatus(status, "✓ Installed and ready", "SuccessBrush");
@@ -90,6 +109,9 @@ namespace OgConverter.Views
                 }
             }
 
+            bool cancelled = _cts.IsCancellationRequested;
+            _cts.Dispose();
+            _cts = null;
             _busy = false;
             _finished = true;
             ConfirmButton.Content = "Done";
@@ -97,7 +119,17 @@ namespace OgConverter.Views
             CancelButton.Visibility = Visibility.Collapsed;
             FooterNote.Text = allOk
                 ? "All set. The new formats show up on the wheel right away."
-                : "You can try again any time from Settings › Engine.";
+                : cancelled
+                    ? "Install cancelled. If an installer had already started, it may still finish on its own. You can try again any time from Settings › Engine."
+                    : "You can try again any time from Settings › Engine.";
+        }
+
+        private void CancelInstall()
+        {
+            if (_cts == null || _cts.IsCancellationRequested) return;
+            _cts.Cancel();
+            CancelButton.IsEnabled = false;
+            CancelButton.Content = "Cancelling…";
         }
 
         private static void SetStatus(TextBlock status, string text, string brushKey)
@@ -107,7 +139,11 @@ namespace OgConverter.Views
             status.Visibility = Visibility.Visible;
         }
 
-        private void OnCancelClick(object sender, RoutedEventArgs e) => DialogResult = false;
+        private void OnCancelClick(object sender, RoutedEventArgs e)
+        {
+            if (_busy) CancelInstall();
+            else DialogResult = false;
+        }
 
         private void OnHeaderMouseDown(object sender, MouseButtonEventArgs e)
         {

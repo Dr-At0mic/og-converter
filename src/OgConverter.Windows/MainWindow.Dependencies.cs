@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -83,15 +84,27 @@ namespace OgConverter
             }
         }
 
-        /// <summary>Installs <paramref name="dep"/> and looks for it again. Returns null when it's ready to use, otherwise why not.</summary>
-        private async Task<string?> InstallDependencyAsync(Dependency dep)
+        /// <summary>
+        /// Installs <paramref name="dep"/> and looks for it again. Returns null when it's ready to use, otherwise why not
+        /// (also when <paramref name="cancellationToken"/> stopped it).
+        /// </summary>
+        private async Task<string?> InstallDependencyAsync(Dependency dep, CancellationToken cancellationToken = default)
         {
             string name = DependencyService.DisplayName(dep);
             int exitCode;
             string output;
             try
             {
-                (exitCode, output) = await DependencyService.InstallAsync(dep);
+                (exitCode, output) = await DependencyService.InstallAsync(dep, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // It may have got far enough to be usable anyway
+                if (dep == Dependency.FFmpeg) _engine.RefreshFFmpeg();
+                else DocumentEngine.RefreshLibreOffice();
+                CheckFFmpegStatus();
+                bool installed = dep == Dependency.FFmpeg ? _engine.IsFFmpegAvailable : DocumentEngine.LibreOfficePath != null;
+                return installed ? null : "Install cancelled. You can try again any time from Settings › Engine.";
             }
             catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
             {
