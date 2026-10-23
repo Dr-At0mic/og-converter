@@ -46,6 +46,7 @@ namespace OgConverter.Models
     {
         public string PageRanges { get; set; } = string.Empty;
         public PdfSplitMode SplitMode { get; set; } = PdfSplitMode.ExtractToOne;
+        /// <summary>The files to join, in order: PDFs for Merge PDFs, or pictures for Convert › PDF as one document.</summary>
         public System.Collections.Generic.List<string> MergeInputs { get; set; } = new();
 
         /// <summary>Current password, for Unlock.</summary>
@@ -68,7 +69,13 @@ namespace OgConverter.Models
         public double TrimEnd { get; set; }
         /// <summary>Copy the streams instead of re-encoding: instant, but the cut snaps to the nearest keyframe.</summary>
         public bool TrimFast { get; set; }
+
+        /// <summary>The icon picked for Folder Icon; no images means back to the default icon.</summary>
+        public System.Collections.Generic.List<FolderIconImage>? FolderIcon { get; set; }
     }
+
+    /// <summary>One size of a drawn folder icon, as PNG.</summary>
+    public sealed record FolderIconImage(int Size, byte[] Png);
 
     /// <summary>What kind of compression pipeline a file goes through.</summary>
     public enum CompressionKind { Image, AnimatedGif, Svg, Video, Audio, Pdf, Office, Archive, General }
@@ -380,6 +387,13 @@ namespace OgConverter.Models
 
         /// <summary>Last choices made in the Archive dialog (the password is never saved).</summary>
         public ArchiveOptions? LastArchive { get; set; }
+
+        /// <summary>Several pictures → PDF: whether the last choice was one merged PDF (true) or a PDF per picture.</summary>
+        public bool LastImagesToPdfMerge { get; set; } = true;
+
+        /// <summary>Last colour and symbol picked in the Folder Icon dialog (names from <see cref="Services.FolderIconLibrary"/>; "" = no symbol).</summary>
+        public string LastFolderIconColor { get; set; } = "Blue";
+        public string LastFolderIconSymbol { get; set; } = "Star";
 
         public static readonly string[] AvailableWheelKeys = { "Shift", "Control", "Alt", "Win", "Space" };
 

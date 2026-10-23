@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -47,6 +48,48 @@ namespace OgConverter.Tests
                 Console.WriteLine($"     Cancelled before start: Success={pre.IsSuccess} '{pre.ErrorMessage}'");
                 if (pre.IsSuccess || pre.ErrorMessage != ConversionEngine.CancelledMessage) throw new Exception("Pre-cancelled job ran");
             }
+
+            // Several pictures → Convert › PDF as one document: a page each, in the order given, next to the first picture
+            string pictures = Path.Combine(tempDir, "pictures");
+            Directory.CreateDirectory(pictures);
+            var names = new[] { "scan 10.png", "scan 2.png", "Scan 1.png" }.Select(n => Path.Combine(pictures, n)).ToList();
+            foreach (string n in names) File.Copy(Path.Combine(tempDir, "test_input.png"), n);
+            var sorted = DroppedPaths.SortByName(names).Select(Path.GetFileName).ToList();
+            Console.WriteLine($"     Picture order: {string.Join(", ", sorted)}");
+            if (!sorted.SequenceEqual(new[] { "Scan 1.png", "scan 2.png", "scan 10.png" })) throw new Exception("Pictures aren't sorted by number");
+
+            var pdf = new WheelItem { Id = "pdf", Title = "PDF", Extension = "pdf", Mode = WheelMode.Convert };
+            var jpgJob = await engine.ExecuteAsync(names[2], new WheelItem { Id = "jpg", Title = "JPG", Extension = "jpg", Mode = WheelMode.Convert }, settings);
+            if (!jpgJob.IsSuccess) throw new Exception($"PNG → JPG failed: {jpgJob.ErrorMessage}");
+            var inputs = new List<string> { names[2], jpgJob.TargetPath, names[1] };
+            var merged = await engine.ExecuteAsync(inputs[0], pdf, settings, new ToolParameters { MergeInputs = inputs });
+            int pages = merged.IsSuccess ? PdfToolsService.GetPageCount(merged.TargetPath) : 0;
+            Console.WriteLine($"     Pictures merged: {Path.GetFileName(merged.TargetPath)} Success={merged.IsSuccess} pages={pages} {merged.ErrorMessage}");
+            if (!merged.IsSuccess || pages != 3 || Path.GetFileName(merged.TargetPath) != "Scan 1_merged.pdf")
+                throw new Exception("Merging pictures into one PDF failed");
+
+            // The same pages as converting each picture alone
+            long singles = 0;
+            foreach (string input in inputs)
+            {
+                var one = await engine.ExecuteAsync(input, pdf, settings);
+                if (!one.IsSuccess || PdfToolsService.GetPageCount(one.TargetPath) != 1) throw new Exception($"{Path.GetFileName(input)} → PDF failed: {one.ErrorMessage}");
+                singles += one.ConvertedSizeBytes;
+            }
+            Console.WriteLine($"     One PDF {merged.ConvertedSizeBytes:N0} bytes vs three single PDFs {singles:N0} bytes");
+            if (merged.ConvertedSizeBytes > singles) throw new Exception("The merged PDF is bigger than the single PDFs together");
+
+            // A JPEG with neither a JFIF nor an Exif header (PDFsharp can't read those as they are) still becomes a page
+            byte[] jpeg = File.ReadAllBytes(jpgJob.TargetPath);
+            int app0 = jpeg[2] == 0xFF && jpeg[3] == 0xE0 ? 4 + (jpeg[4] << 8 | jpeg[5]) : 2;
+            string bare = Path.Combine(pictures, "bare.jpg");
+            File.WriteAllBytes(bare, jpeg[..2].Concat(jpeg[app0..]).ToArray());
+            var bareJob = await engine.ExecuteAsync(bare, pdf, settings);
+            Console.WriteLine($"     JPEG without JFIF header → PDF: Success={bareJob.IsSuccess} {bareJob.ErrorMessage}");
+            if (!bareJob.IsSuccess) throw new Exception("A JPEG without a JFIF header didn't convert to PDF");
+
+            var gone = await engine.ExecuteAsync(inputs[0], pdf, settings, new ToolParameters { MergeInputs = new List<string> { inputs[0], Path.Combine(pictures, "missing.png") } });
+            if (gone.IsSuccess || gone.ErrorMessage?.Contains("missing.png") != true) throw new Exception("A missing picture wasn't reported");
 
             if (engine.FFmpegPath == null)
             {

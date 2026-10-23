@@ -6,7 +6,7 @@ using OgConverter.Services;
 
 namespace OgConverter.Platform.Windows
 {
-    /// <summary>Clipboard, Explorer, Windows Terminal, the wallpaper and Mark of the Web.</summary>
+    /// <summary>Clipboard, Explorer, Windows Terminal, the wallpaper, folder icons and Mark of the Web.</summary>
     public sealed class WindowsDesktopServices : IDesktopServices
     {
         public void SetClipboardText(string text) => RunOnSta(() => Clipboard.SetText(text));
@@ -66,6 +66,10 @@ namespace OgConverter.Platform.Windows
         public void Unblock(string path) => WindowsShellService.Unblock(path);
 
         public void SetWallpaper(string imagePath) => WindowsShellService.SetWallpaper(imagePath);
+
+        public void SetFolderIcon(string folder, string? iconFile) => WindowsShellService.SetFolderIcon(folder, iconFile);
+
+        public string? GetFolderIcon(string folder) => WindowsShellService.GetFolderIcon(folder);
 
         /// <summary>
         /// Runs clipboard work on an STA thread. Uses a short-lived thread rather than the UI dispatcher,

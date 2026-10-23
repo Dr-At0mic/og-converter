@@ -140,6 +140,27 @@ namespace OgConverter.Tests
             Save((FrameworkElement)merge.Content, Path.Combine(outDir, "dialog_merge.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
             merge.Close();
 
+            var pictures = new ImagesToPdfDialog(new[] { "scan 10.jpg", "scan 2.jpg", "Scan 1.png", "receipt.heic" }.Select(n => Path.Combine(outDir, n)), merge: true)
+                { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
+            pictures.Show();
+            Save((FrameworkElement)pictures.Content, Path.Combine(outDir, "dialog_pictures_pdf.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
+            pictures.Close();
+
+            string projects = Path.Combine(outDir, "Projects");
+            Directory.CreateDirectory(projects);
+            var folderIcon = new FolderIconDialog(new[] { projects }, "Blue", "Code") { Left = -20000, Top = -20000, ShowActivated = false, WindowStartupLocation = WindowStartupLocation.Manual };
+            folderIcon.Show();
+            Save((FrameworkElement)folderIcon.Content, Path.Combine(outDir, "dialog_folder_icon.png"), Color.FromRgb(0x1E, 0x23, 0x2E));
+            folderIcon.Close();
+            // Really set it, so Explorer's own rendering of the folder can be checked
+            FolderIconService.Apply(projects, FolderIconRenderer.Render(FolderIconRenderer.Design(FolderIconLibrary.Colors[5], FolderIconLibrary.Symbols.First(s => s.Name == "Code"))));
+            // Every colour with a symbol, at Explorer's large-icon size, for checking the drawing
+            for (int i = 0; i < FolderIconLibrary.Colors.Count; i++)
+            {
+                var design = FolderIconRenderer.Design(FolderIconLibrary.Colors[i], i == 0 ? null : FolderIconLibrary.Symbols[(i * 3) % FolderIconLibrary.Symbols.Count]);
+                File.WriteAllBytes(Path.Combine(outDir, $"folder_icon_{FolderIconLibrary.Colors[i].Name.ToLowerInvariant()}.png"), FolderIconRenderer.RenderPng(design, 256));
+            }
+
             // Archive: default ZIP, 7z with a password (Advanced open), tar.zst with Guetzli pictures; Protect as a 7z
             string album = Path.Combine(outDir, "Holiday Album");
             Directory.CreateDirectory(album);

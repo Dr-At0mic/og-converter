@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Threading;
@@ -30,8 +31,8 @@ namespace OgConverter.Services
             LinuxWheel.Register();
         }
 
-        /// <summary>The user picked a slice for a file. Runs on the UI thread.</summary>
-        public event Func<string, WheelItem, Task>? FileActionRequested;
+        /// <summary>The user picked a slice for the dragged files (the one the wheel showed first). Runs on the UI thread.</summary>
+        public event Func<IReadOnlyList<string>, WheelItem, Task>? FileActionRequested;
 
         /// <summary>
         /// Another launch of the app (a second start from the menu, or <c>og-converter</c> without <c>--wheel</c>) asked
@@ -166,16 +167,16 @@ namespace OgConverter.Services
             overlay.ApplyScale(s.WheelScale, s.ShowKeyHints);
         }
 
-        private async void OnFileActionRequested(string path, WheelItem item)
+        private async void OnFileActionRequested(IReadOnlyList<string> paths, WheelItem item)
         {
             if (FileActionRequested is not { } handler) return;
             try
             {
-                await handler(path, item);
+                await handler(paths, item);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[OG Converter] {item.Title} on {path} failed: {ex}");
+                Console.Error.WriteLine($"[OG Converter] {item.Title} on {paths[0]} failed: {ex}");
             }
         }
 

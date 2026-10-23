@@ -1,0 +1,140 @@
+<v:DialogWindow xmlns="https://github.com/avaloniaui"
+                xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                xmlns:c="using:OgConverter.Controls"
+                xmlns:v="using:OgConverter.Views"
+                x:Class="OgConverter.Views.FolderIconDialog"
+                Title="Folder icon" Width="680" Height="600" MinWidth="560" MinHeight="480"
+                SizeToContent="Manual" CanResize="True">
+
+    <Window.Styles>
+        <!-- Colour swatches: a filled circle, ringed in the accent when picked -->
+        <Style Selector="ListBox#ColorList ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBox#ColorList ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBox#ColorList ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBox#ColorList ListBoxItem:pointerover Border.ring">
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderStrongBrush}" />
+        </Style>
+        <Style Selector="ListBox#ColorList ListBoxItem:selected Border.ring">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+
+        <!-- Symbol tiles -->
+        <Style Selector="ListBox#SymbolList ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,6,6" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ListBox#SymbolList ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SurfaceRaisedBrush}" />
+        </Style>
+        <Style Selector="ListBox#SymbolList ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource AccentSubtleBrush}" />
+        </Style>
+        <Style Selector="ListBox#SymbolList ListBoxItem:selected Border.tile">
+            <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        </Style>
+    </Window.Styles>
+
+    <Border Classes="DialogCard">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <!-- Header (drag to move) -->
+            <Grid Classes="DialogHeader" ColumnDefinitions="Auto,*" Margin="24,22,24,16" PointerPressed="OnHeaderPointerPressed">
+                <Border Classes="DialogBadge" Background="{DynamicResource ModeActionsSubtleBrush}">
+                    <TextBlock Text="{c:Icon E8B7}" Classes="Icon" Foreground="{DynamicResource ModeActionsBrush}" />
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Folder icon" Classes="H2" />
+                    <TextBlock x:Name="SubtitleText" Classes="Caption" Margin="0,2,0,0" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+            </Grid>
+
+            <!-- Preview | colours and symbols -->
+            <Grid Grid.Row="1" Margin="24,0" ColumnDefinitions="196,*">
+                <StackPanel Grid.Column="0" Margin="0,0,20,0">
+                    <Border Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="10"
+                            Width="176" Height="176">
+                        <Image x:Name="PreviewImage" Width="144" Height="144" RenderOptions.BitmapInterpolationMode="HighQuality" />
+                    </Border>
+                    <TextBlock x:Name="PreviewCaption" Classes="Caption" TextWrapping="Wrap" TextAlignment="Center" Margin="0,10,0,0" />
+                </StackPanel>
+
+                <Grid Grid.Column="1" RowDefinitions="Auto,Auto,Auto,*">
+                    <TextBlock Text="Colour" FontWeight="SemiBold" Margin="0,0,0,8" />
+                    <ListBox x:Name="ColorList" Grid.Row="1" Background="Transparent" BorderThickness="0" Padding="0"
+                             SelectionChanged="OnChoiceChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="v:ColorChoice">
+                                <Border Classes="ring" Width="34" Height="34" CornerRadius="17" BorderThickness="2" BorderBrush="Transparent"
+                                        Background="Transparent" ToolTip.Tip="{Binding Name}">
+                                    <Ellipse Width="24" Height="24" Fill="{Binding Fill}" />
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <TextBlock Grid.Row="2" Text="Symbol" FontWeight="SemiBold" Margin="0,12,0,8" />
+                    <Border Grid.Row="3" Background="{DynamicResource InputBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="8" Padding="6,6,0,0">
+                        <ListBox x:Name="SymbolList" Background="Transparent" BorderThickness="0" Padding="0"
+                                 SelectionChanged="OnChoiceChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel />
+                                </ItemsPanelTemplate>
+                            </ListBox.ItemsPanel>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate x:DataType="v:SymbolChoice">
+                                    <Border Classes="tile" Width="48" Height="48" CornerRadius="8" BorderThickness="1" BorderBrush="Transparent"
+                                            Background="Transparent" ToolTip.Tip="{Binding Name}">
+                                        <Grid Width="24" Height="24">
+                                            <Path Data="{Binding Geometry}" Fill="{DynamicResource TextPrimaryBrush}" Stretch="Uniform" />
+                                            <TextBlock Text="{c:Icon E8B7}" Classes="Icon" FontSize="20" Foreground="{DynamicResource TextTertiaryBrush}"
+                                                       IsVisible="{Binding IsNone}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- Footer -->
+            <Border Grid.Row="2" Classes="DialogFooter" Margin="0,18,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                        <Button Click="OnPictureClick" Margin="0,0,8,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{c:Icon E91B}" Classes="Icon" FontSize="12" Margin="0,0,8,0" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="Use a picture…" />
+                            </StackPanel>
+                        </Button>
+                        <Button x:Name="ResetButton" Click="OnResetClick" ToolTip.Tip="Back to the standard folder icon">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{c:Icon E72C}" Classes="Icon" FontSize="12" Margin="0,0,8,0" Foreground="{DynamicResource TextPrimaryBrush}" />
+                                <TextBlock Text="Reset to default" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="Cancel" IsCancel="True" Click="OnCancelClick" Margin="0,0,8,0" MinWidth="88" />
+                        <Button x:Name="ApplyButton" Theme="{StaticResource AccentButton}" Content="Apply" IsDefault="True" Click="OnApplyClick" MinWidth="88" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</v:DialogWindow>

@@ -247,16 +247,22 @@ namespace OgConverter.Services
 
             using var data = new MemoryStream();
             string ext = Path.GetExtension(imagePath).ToLowerInvariant();
+            XImage? xImage = null;
             if (ext is ".jpg" or ".jpeg" && ImageCodec.ReadOrientation(image.Metadata) == 1)
             {
                 using var fs = File.OpenRead(imagePath);
                 fs.CopyTo(data);
+                data.Position = 0;
+                // PDFsharp only reads JPEGs with a JFIF or Exif header (Skia and some web tools write neither): those go in as PNG
+                try { xImage = XImage.FromStream(data); }
+                catch (InvalidOperationException) { data.SetLength(0); }
             }
-            else
+            if (xImage == null)
             {
                 Platform.Images.Encode(image.Bitmap, data, ImageEncoding.Png());
+                data.Position = 0;
+                xImage = XImage.FromStream(data);
             }
-            data.Position = 0;
 
             var bmp = image.Bitmap;
             double dpiX = bmp.DpiX > 1 ? bmp.DpiX : 96, dpiY = bmp.DpiY > 1 ? bmp.DpiY : 96;
@@ -266,7 +272,7 @@ namespace OgConverter.Services
             var page = doc.AddPage();
             page.Width = XUnit.FromPoint(width);
             page.Height = XUnit.FromPoint(height);
-            using (var xImage = XImage.FromStream(data))
+            using (xImage)
             using (var gfx = XGraphics.FromPdfPage(page))
             {
                 gfx.DrawImage(xImage, 0, 0, width, height);

@@ -92,6 +92,20 @@ namespace OgConverter.Tests
             string appendix = pdf.Replace("Quarterly Report", "Appendix A");
             File.Copy(pdf, appendix, true);
             Snap(() => new PdfMergeDialog(new[] { pdf, appendix }), "dialog_merge.png");
+            Snap(() => new ImagesToPdfDialog(new[] { "scan 10.jpg", "scan 2.jpg", "Scan 1.png", "receipt.heic" }.Select(n => Path.Combine(outDir, n)), merge: true),
+                "dialog_pictures_pdf.png");
+
+            string projects = Path.Combine(outDir, "Projects");
+            Directory.CreateDirectory(projects);
+            Snap(() => new FolderIconDialog(new[] { projects }, "Blue", "Code"), "dialog_folder_icon.png");
+            // Every colour with a symbol, at a large icon size, for checking the drawing
+            for (int i = 0; i < FolderIconLibrary.Colors.Count; i++)
+            {
+                using var icon = FolderIconRenderer.Render(FolderIconLibrary.Colors[i], i == 0 ? null : FolderIconLibrary.Symbols[(i * 3) % FolderIconLibrary.Symbols.Count], null, 256);
+                icon.Save(Path.Combine(outDir, $"folder_icon_{FolderIconLibrary.Colors[i].Name.ToLowerInvariant()}.png"), Avalonia.Media.Imaging.PngBitmapEncoderOptions.Default);
+            }
+            // Really set one, so the file manager's own rendering can be checked
+            FolderIconService.Apply(projects, FolderIconRenderer.RenderAll(FolderIconLibrary.Colors[5], FolderIconLibrary.Symbols.First(s => s.Name == "Code"), null));
 
             // Archive: default ZIP, 7z with a password (Advanced open), tar.zst; Protect as a 7z
             string album = Path.Combine(outDir, "Holiday Album");

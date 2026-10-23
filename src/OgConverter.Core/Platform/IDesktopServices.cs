@@ -33,5 +33,14 @@ namespace OgConverter.Services
         /// stays put (JPG or PNG).
         /// </summary>
         void SetWallpaper(string imagePath);
+
+        /// <summary>
+        /// Shows <paramref name="iconFile"/> (an .ico on Windows, a PNG elsewhere) as <paramref name="folder"/>'s icon in the
+        /// file manager, or its default icon again when it's null.
+        /// </summary>
+        void SetFolderIcon(string folder, string? iconFile);
+
+        /// <summary>The custom icon file the file manager shows for <paramref name="folder"/>, or null for the default icon.</summary>
+        string? GetFolderIcon(string folder);
     }
 }

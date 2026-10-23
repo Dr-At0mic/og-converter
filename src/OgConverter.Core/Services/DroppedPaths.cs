@@ -44,5 +44,40 @@ namespace OgConverter.Services
             if (path.EndsWith(':')) path += "\\"; // drive root
             if ((File.Exists(path) || Directory.Exists(path)) && !paths.Contains(path, Platform.PathComparer)) paths.Add(path);
         }
+
+        /// <summary>Sorted by file name the way file managers show them: "scan 2" before "scan 10".</summary>
+        public static List<string> SortByName(IEnumerable<string> paths) =>
+            paths.OrderBy(Path.GetFileName, NaturalComparer.Instance).ToList();
+
+        /// <summary>Compares runs of digits by value and everything else case-insensitively.</summary>
+        private sealed class NaturalComparer : IComparer<string?>
+        {
+            public static readonly NaturalComparer Instance = new();
+
+            public int Compare(string? a, string? b)
+            {
+                a ??= ""; b ??= "";
+                int i = 0, j = 0;
+                while (i < a.Length && j < b.Length)
+                {
+                    if (char.IsAsciiDigit(a[i]) && char.IsAsciiDigit(b[j]))
+                    {
+                        int si = i, sj = j;
+                        while (i < a.Length && char.IsAsciiDigit(a[i])) i++;
+                        while (j < b.Length && char.IsAsciiDigit(b[j])) j++;
+                        var x = a.AsSpan(si, i - si).TrimStart('0');
+                        var y = b.AsSpan(sj, j - sj).TrimStart('0');
+                        if (x.Length != y.Length) return x.Length.CompareTo(y.Length);
+                        int digits = x.SequenceCompareTo(y);
+                        if (digits != 0) return digits;
+                        continue;
+                    }
+                    int c = char.ToUpperInvariant(a[i]).CompareTo(char.ToUpperInvariant(b[j]));
+                    if (c != 0) return c;
+                    i++; j++;
+                }
+                return (a.Length - i).CompareTo(b.Length - j);
+            }
+        }
     }
 }

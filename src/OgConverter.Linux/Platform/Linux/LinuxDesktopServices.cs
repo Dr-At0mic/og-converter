@@ -212,7 +212,59 @@ namespace OgConverter.Platform.Linux
             }
         }
 
+        // ------------------------------------------------------------------ Folder icons
+
+        /// <summary>
+        /// GIO keeps a custom icon per folder in its metadata store, which GNOME Files (and Nemo, Caja) show.
+        /// The metadata names the icon by its full path, so after moving the folder the icon has to be set again.
+        /// </summary>
+        public void SetFolderIcon(string folder, string? iconFile)
+        {
+            string gio = Services.Platform.FindOnPath("gio")
+                ?? throw new InvalidOperationException("Folder icons need the gio tool (part of GLib), which GNOME Files reads them through.");
+            int code = iconFile != null
+                ? Run(gio, 10_000, "set", folder, "metadata::custom-icon", new Uri(Path.GetFullPath(iconFile)).AbsoluteUri)
+                : Run(gio, 10_000, "set", "-t", "unset", folder, "metadata::custom-icon");
+            if (code != 0) throw new InvalidOperationException("The file manager didn't accept the folder icon (gio set failed).");
+        }
+
+        public string? GetFolderIcon(string folder)
+        {
+            if (Services.Platform.FindOnPath("gio") is not { } gio) return null;
+            // "  metadata::custom-icon: file:///home/me/Music/.folder-icon.png"
+            string output = RunForOutput(gio, 10_000, "info", "-a", "metadata::custom-icon", folder);
+            const string key = "metadata::custom-icon:";
+            foreach (string line in output.Split('\n'))
+            {
+                int at = line.IndexOf(key, StringComparison.Ordinal);
+                if (at < 0) continue;
+                string value = line[(at + key.Length)..].Trim();
+                return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.IsFile ? uri.LocalPath : value.Length > 0 ? value : null;
+            }
+            return null;
+        }
+
         // ------------------------------------------------------------------ Helpers
+
+        /// <summary>Runs a tool to completion and returns what it printed; empty when it fails, can't start or takes too long.</summary>
+        private static string RunForOutput(string tool, int timeoutMs, params string[] args)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo(tool) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                foreach (string a in args) psi.ArgumentList.Add(a);
+                using var p = Process.Start(psi);
+                if (p == null) return "";
+                var output = p.StandardOutput.ReadToEndAsync();
+                _ = p.StandardError.ReadToEndAsync();
+                if (!p.WaitForExit(timeoutMs) || p.ExitCode != 0) return "";
+                return output.Result;
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                return "";
+            }
+        }
 
         /// <summary>Runs a tool to completion (output discarded); its exit code, or -1 when it can't start or takes too long.</summary>
         private static int Run(string tool, int timeoutMs, params string[] args)

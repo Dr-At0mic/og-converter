@@ -41,7 +41,7 @@ https://github.com/user-attachments/assets/22a06ab1-d5d4-4027-9332-6b280cf2b70c
 - **Three wheels, rebindable keys** (**Shift**, **Ctrl**, **Alt**, **Win**, **Space**):
   - `⇧ Shift`: **Convert**: images (incl. iPhone **HEIC** and **SVG**), video, audio, PDF, Word/Excel/PowerPoint, OpenDocument, Markdown/README, **web pages (HTML → PDF or a full-page picture)**, archives (ZIP, 7z, RAR, TAR, GZ…).
   - `Ctrl`: **Tools**: Compress, **Crop** (images & video, on a live preview), **Trim** (video, start to end), **Rotate**, **Extract Text (OCR)**, video **Snapshot**, resize, grayscale, remove EXIF, mute, 720p, PDF split/merge/rotate/protect, and more.
-  - `Alt`: **Actions**: Copy Path, Show in Explorer, Terminal, SHA-256, Duplicate, **Archive** (ZIP, 7z, RAR, tar.gz, tar.zst, ISO…), Base64, Protect/Unlock, plus **Copy Image** / **Wallpaper** for pictures, **Copy Text** for text and code files, and **Unblock** for downloaded files. Work on folders too.
+  - `Alt`: **Actions**: Copy Path, Show in Explorer, Terminal, SHA-256, Duplicate, **Archive** (ZIP, 7z, RAR, tar.gz, tar.zst, ISO…), Base64, Protect/Unlock, plus **Copy Image** / **Wallpaper** for pictures, **Copy Text** for text and code files, and **Unblock** for downloaded files. Work on folders too, which also get **Folder Icon**.
   - `Esc`: cancel the wheel at any time.
 - **Batches**: drag several files at once and the option you pick runs on all of them, a few at a time so the PC stays responsive, with one progress notification, a summary at the end, and Cancel for one file or the whole batch (Windows; the Linux beta still takes one file per drag).
 - **Lossless & lossy compression for every file type** (see below), including Google's **Guetzli** for smaller JPEGs.
@@ -164,6 +164,19 @@ For any file or folder, **Protect › Password-protected archive** makes a ZIP, 
 
 ---
 
+### Folder icons (Actions › Folder Icon)
+
+Drag a folder (or several), tap `Alt` and pick **Folder Icon**: choose one of 10 colours and 32 symbols (work, code, music, photos,
+games, travel…) with a live preview, or **Use a picture…** of your own. **Apply** changes the icon right away; **Reset to default**
+brings back the standard folder.
+
+- The icon is saved inside the folder as a hidden `.folder-icon.ico` (Windows) or `.folder-icon.png` (Linux), so it goes wherever the
+  folder goes: moved, copied to a USB stick or zipped.
+- **Windows** sets it the same way as Properties › Customize › Change Icon (`desktop.ini`), with the icon named relative to the folder.
+  Folders where you can't write (system folders, some network shares) can't get one.
+- **Linux** sets it with `gio` (GNOME Files, Nemo, Caja). The file manager remembers the icon by path, so after moving the folder set
+  it again.
+
 ## ✂️ Crop & Trim
 
 **Crop** (Tools wheel, images and videos) opens a window with the picture, or a frame of the video:
@@ -206,6 +219,7 @@ Pictures on the internet (build badges) are waited for up to 20 seconds; on an o
 | **Web page** (`.html`, `.mht`) | Convert | **PDF** (printed by Edge), **PNG/JPG** of the whole page top to bottom, plus Word/RTF/TXT for `.html` |
 | **SVG** | Convert | PNG (transparent, at 2× for sharp icons), JPG, ICO, WebP…, or a **vector PDF** |
 | **HEIC / HEIF** (iPhone photos) | Convert | JPG, PNG, PDF, WebP… the right way up. Uses the free [HEIF Image Extensions](https://apps.microsoft.com/detail/9pmmsr1cgpwg) from the Microsoft Store, or FFmpeg |
+| **Several pictures** | Convert › **PDF** | Asks first: **one PDF** with a page per picture (sorted by name; reorder or remove in the list), saved as `first_merged.pdf`, or **one PDF per picture** |
 | **Picture** | Tools › **Extract Text** | The text in it (OCR), saved as `name_text.txt` and copied |
 | **Scanned PDF** | Convert › TXT | Pages that are only pictures are read with OCR automatically |
 | **Picture / video** | Tools › **Rotate 90°** | Turned clockwise. Photos keep their format and camera details; videos keep their sound |
@@ -611,5 +625,5 @@ Licensed under the [GNU General Public License v3.0](LICENSE).
 [SharpCompress](https://github.com/adamhathcock/sharpcompress), [ZstdSharp](https://github.com/oleg-st/ZstdSharp),
 [K4os.Compression.LZ4](https://github.com/MiloszKrajewski/K4os.Compression.LZ4), [PDFsharp](https://github.com/empira/PDFsharp) 6.2.4 and
 [Konscious Argon2](https://github.com/kmaragon/Konscious.Security.Cryptography) (MIT), [Markdig](https://github.com/xoofx/markdig) (BSD-2-Clause)
-and [PdfPig](https://github.com/UglyToad/PdfPig) (Apache 2.0). Installed or downloaded only when you ask:
+and [PdfPig](https://github.com/UglyToad/PdfPig) (Apache 2.0). Folder icon symbols: [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT). Installed or downloaded only when you ask:
 FFmpeg (LGPL/GPL), LibreOffice (MPL), 7-Zip (LGPL), WinRAR (proprietary shareware) and Guetzli (Apache 2.0).

@@ -31,7 +31,8 @@ namespace OgConverter.Views
         /// <summary>After the button goes up, how long a drop may still arrive (X11 drag-and-drop runs behind the extension's call).</summary>
         private static readonly TimeSpan DropGrace = TimeSpan.FromMilliseconds(450);
 
-        public event Action<string, WheelItem>? FileActionRequested;
+        /// <summary>A slice was picked: the files (the shown one first, then the rest of a multi-file drag) and the option.</summary>
+        public event Action<IReadOnlyList<string>, WheelItem>? FileActionRequested;
 
         public RadialWheelCanvas WheelCanvas { get; }
 
@@ -45,6 +46,8 @@ namespace OgConverter.Views
         private readonly Border _separator;
 
         private string? _currentFilePath;
+        /// <summary>Everything in the drag, when it held more than the shown file.</summary>
+        private List<string> _draggedFiles = new();
         private WheelMode _currentMode = WheelMode.Convert;
         private string _convertKey = "Shift";
         private double _scale = 1.0;
@@ -376,6 +379,7 @@ namespace OgConverter.Views
             _open = false;
             _showToken++;
             _currentFilePath = null;
+            _draggedFiles = new();
             _dragHasFile = false;
             WheelCanvas.HoveredIndex = -1;
             Hide();
@@ -385,13 +389,14 @@ namespace OgConverter.Views
         private void Choose(int index)
         {
             string? file = _currentFilePath;
+            var files = _draggedFiles.Count > 1 && _draggedFiles[0] == file ? _draggedFiles : new List<string> { file ?? "" };
             var items = WheelCanvas.Items;
             Dismiss();
 
             if (!string.IsNullOrEmpty(file) && index >= 0 && index < items.Count)
             {
                 SoundService.Instance.Play(UiSound.Select);
-                FileActionRequested?.Invoke(file, items[index]);
+                FileActionRequested?.Invoke(files, items[index]);
             }
         }
 
@@ -502,6 +507,7 @@ namespace OgConverter.Views
             _dragHasFile = files.Count > 0;
             if (_dragHasFile)
             {
+                _draggedFiles = files;
                 if (files[0] != _currentFilePath) SetCurrentFile(files[0]);
                 UpdateHover(e);
                 e.DragEffects = DragDropEffects.Copy;
@@ -542,6 +548,7 @@ namespace OgConverter.Views
         {
             var files = GetPaths(e.DataTransfer);
             if (files.Count > 0 && files[0] != _currentFilePath) SetCurrentFile(files[0]);
+            if (files.Count > 0) _draggedFiles = files;
             int idx = files.Count > 0 ? WheelCanvas.HitTestSlice(e.GetPosition(WheelCanvas)) : -1;
             _dragHasFile = false;
             e.DragEffects = idx >= 0 ? DragDropEffects.Copy : DragDropEffects.None;

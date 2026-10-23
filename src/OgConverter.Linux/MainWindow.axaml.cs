@@ -127,7 +127,46 @@ namespace OgConverter
 
         private void SetupWheel()
         {
-            _wheel.FileActionRequested += ProcessJobAsync;
+            _wheel.FileActionRequested += OnWheelActionAsync;
+        }
+
+        /// <summary>
+        /// A slice picked on the wheel. Several pictures to PDF ask whether to make one PDF or one each, and Folder Icon
+        /// gives every dragged folder the icon picked once; anything else runs on the file the wheel showed (batches of
+        /// other options aren't on Linux yet).
+        /// </summary>
+        private async Task OnWheelActionAsync(IReadOnlyList<string> files, WheelItem option)
+        {
+            if (option.Id == ConversionEngine.FolderIconActionId)
+            {
+                var folders = files.Where(Directory.Exists).ToList();
+                if (folders.Count == 0) return;
+                var (ok, chosen) = await AskFolderIconAsync(folders);
+                if (!ok) return;
+                foreach (string folder in folders) await ProcessJobAsync(folder, option, chosen);
+                return;
+            }
+
+            if (files.Count > 1 && ConversionEngine.IsPicturesToPdf(files, option))
+            {
+                var settings = _settingsService.Current;
+                var dlg = new ImagesToPdfDialog(files, settings.LastImagesToPdfMerge);
+                if (!await dlg.ShowForResultAsync(DialogOwner)) return;
+                settings.LastImagesToPdfMerge = dlg.Merge;
+                _settingsService.SaveSettings(settings);
+
+                var pictures = dlg.Pictures;
+                if (dlg.Merge)
+                {
+                    await ProcessJobAsync(pictures[0], option, new ToolParameters { MergeInputs = pictures.ToList() });
+                }
+                else
+                {
+                    foreach (string picture in pictures) await ProcessJobAsync(picture, option);
+                }
+                return;
+            }
+            await ProcessJobAsync(files[0], option);
         }
 
         /// <summary>Starts listening for wheel triggers. Called by the App once the window exists (shown or not).</summary>
@@ -209,15 +248,21 @@ namespace OgConverter
 
         // ------------------------------------------------------------------ job pipeline
 
-        /// <summary>Collects any input the tool needs, runs the job with live progress, and records the result.</summary>
-        public async Task ProcessJobAsync(string filePath, WheelItem option)
+        /// <summary>
+        /// Collects any input the tool needs, runs the job with live progress, and records the result.
+        /// <paramref name="collected"/> is input already asked for, so no dialog opens.
+        /// </summary>
+        public async Task ProcessJobAsync(string filePath, WheelItem option, ToolParameters? collected = null)
         {
-            ToolParameters? parameters;
+            ToolParameters? parameters = collected;
             try
             {
-                var (ok, collected) = await CollectToolParametersAsync(filePath, option);
-                if (!ok) return; // user cancelled
-                parameters = collected;
+                if (collected == null)
+                {
+                    var (ok, asked) = await CollectToolParametersAsync(filePath, option);
+                    if (!ok) return; // user cancelled
+                    parameters = asked;
+                }
             }
             catch (Exception ex)
             {
@@ -273,6 +318,21 @@ namespace OgConverter
                     _notifyService.ShowCompleted(job, progressNote);
                 }
             });
+        }
+
+        /// <summary>The Folder Icon dialog for <paramref name="folders"/>; remembers the colour and symbol picked.</summary>
+        private async Task<(bool Ok, ToolParameters? Parameters)> AskFolderIconAsync(IReadOnlyList<string> folders)
+        {
+            var settings = _settingsService.Current;
+            var dlg = new FolderIconDialog(folders, settings.LastFolderIconColor, settings.LastFolderIconSymbol);
+            if (!await dlg.ShowForResultAsync(DialogOwner) || dlg.Result == null) return (false, null);
+            if (dlg.Result.Count > 0 && dlg.ChosenColor.Length > 0)
+            {
+                settings.LastFolderIconColor = dlg.ChosenColor;
+                settings.LastFolderIconSymbol = dlg.ChosenSymbol;
+                _settingsService.SaveSettings(settings);
+            }
+            return (true, new ToolParameters { FolderIcon = dlg.Result });
         }
 
         /// <summary>
@@ -334,6 +394,9 @@ namespace OgConverter
                     var dlg = new PdfMergeDialog(new List<string> { filePath });
                     return await dlg.ShowForResultAsync(DialogOwner) ? (true, dlg.Result) : (false, null);
                 }
+
+                case ConversionEngine.FolderIconActionId:
+                    return await AskFolderIconAsync(new[] { filePath });
 
                 case "tool_pdf_protect":
                 case "act_protect":

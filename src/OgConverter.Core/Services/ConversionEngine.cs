@@ -23,6 +23,9 @@ namespace OgConverter.Services
         /// <summary>Wheel id of the Compress tool, for every file kind.</summary>
         public const string CompressToolId = "tool_compress";
 
+        /// <summary>Wheel id of the Folder Icon action (folders only).</summary>
+        public const string FolderIconActionId = "act_folder_icon";
+
         /// <summary>Looks for FFmpeg again, e.g. after installing it from Settings.</summary>
         public void RefreshFFmpeg() => _ffmpegPath = FindFFmpeg();
 
@@ -163,6 +166,21 @@ namespace OgConverter.Services
             }
 
             string ext = job.Option.Extension.ToLowerInvariant();
+
+            // Several pictures → one PDF, a page each in list order
+            if (ext == "pdf" && job.Parameters?.MergeInputs is { Count: > 1 } pictures)
+            {
+                var missing = pictures.Find(p => !File.Exists(p));
+                if (missing != null) throw new InvalidOperationException($"File not found: {Path.GetFileName(missing)}");
+
+                job.TargetPath = GetTargetFilePath(pictures[0], "pdf", settings, "_merged");
+                job.TargetFormat = "PDF";
+                job.OriginalSizeBytes = pictures.Sum(p => new FileInfo(p).Length);
+                await ImagesToPdfAsync(pictures, job.TargetPath, progress);
+                job.IsSuccess = true;
+                return;
+            }
+
             string sourceExt = Path.GetExtension(job.SourcePath).ToLowerInvariant().TrimStart('.');
             string targetPath = GetTargetFilePath(job.SourcePath, ext, settings);
             job.TargetPath = targetPath;
@@ -804,6 +822,19 @@ namespace OgConverter.Services
                     job.IsSuccess = true;
                     break;
 
+                case FolderIconActionId:
+                {
+                    var images = job.Parameters?.FolderIcon ?? throw new InvalidOperationException("Choose an icon for the folder first.");
+                    await Task.Run(() =>
+                    {
+                        if (images.Count == 0) FolderIconService.Reset(job.SourcePath);
+                        else FolderIconService.Apply(job.SourcePath, images);
+                    });
+                    job.TargetFormat = images.Count == 0 ? "Default icon" : "Folder icon";
+                    job.IsSuccess = true;
+                    break;
+                }
+
                 case "act_base64":
                 {
                     string b64Path = GetTargetFilePath(job.SourcePath, "txt", settings, "_base64");
@@ -1008,6 +1039,70 @@ namespace OgConverter.Services
                 try { duration = (await MediaToolkit.ProbeAsync(_ffmpegPath!, input)).DurationSeconds; } catch { }
             }
             await MediaToolkit.RunAsync(_ffmpegPath!, args, duration, progress);
+        }
+
+        /// <summary>Convert › PDF with only pictures dropped: each can be a page of one PDF (see <see cref="ToolParameters.MergeInputs"/>).</summary>
+        public static bool IsPicturesToPdf(IReadOnlyList<string> files, WheelItem option) =>
+            option.Mode == WheelMode.Convert && option.Id == "pdf" && files.All(f => FormatRegistry.DetectCategory(f) == FileCategory.Image);
+
+        /// <summary>
+        /// Makes each picture's page the way converting it alone would (SVG stays vector, HEIC is rasterized first,
+        /// JPEGs are embedded as they are), then joins the pages in list order.
+        /// </summary>
+        private async Task ImagesToPdfAsync(IReadOnlyList<string> pictures, string output, IProgress<double>? progress)
+        {
+            var pages = new List<string>();
+            try
+            {
+                foreach (string picture in pictures)
+                {
+                    MediaToolkit.ThrowIfCancelled();
+                    string page = TempFile("pdf");
+                    pages.Add(page);
+                    try
+                    {
+                        await ImageToPdfPageAsync(picture, page);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        throw new InvalidOperationException($"{Path.GetFileName(picture)}: {ex.Message}", ex);
+                    }
+                    progress?.Report((double)pages.Count / (pictures.Count + 1));
+                }
+                MediaToolkit.ThrowIfCancelled();
+                await Task.Run(() => PdfToolsService.Merge(pages, output));
+            }
+            finally
+            {
+                pages.ForEach(TryDelete);
+            }
+        }
+
+        /// <summary>One picture as a one-page PDF, by the same route as a single Convert › PDF.</summary>
+        private async Task ImageToPdfPageAsync(string picture, string output)
+        {
+            string ext = Path.GetExtension(picture).ToLowerInvariant().TrimStart('.');
+            if (ext == "svg")
+            {
+                if (!BrowserRenderService.IsAvailable) throw new InvalidOperationException(BrowserRenderService.MissingBrowserHint);
+                await BrowserRenderService.SvgToPdfAsync(picture, output);
+            }
+            else if (NeedsRasterizing(ext))
+            {
+                string png = await RasterizeAsync(picture);
+                try
+                {
+                    await ImageToPdfAsync(png, output);
+                }
+                finally
+                {
+                    TryDelete(png);
+                }
+            }
+            else
+            {
+                await ImageToPdfAsync(picture, output);
+            }
         }
 
         /// <summary>Formats Windows can't decode (e.g. AVIF without the codec extension) go through a temporary PNG made by FFmpeg.</summary>

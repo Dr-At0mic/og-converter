@@ -150,6 +150,8 @@ namespace OgConverter.Wheel
             public bool IsBlocked(string path) => false;
             public void Unblock(string path) { }
             public void SetWallpaper(string imagePath) { }
+            public void SetFolderIcon(string folder, string? iconFile) { }
+            public string? GetFolderIcon(string folder) => null;
         }
     }
 }

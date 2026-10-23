@@ -53,6 +53,9 @@ namespace OgConverter.Services
             public void Dispose() => Cancellation.Value = _previous;
         }
 
+        /// <summary>Throws when the current job (see <see cref="CancelWith"/>) was cancelled; for long loops between FFmpeg runs.</summary>
+        public static void ThrowIfCancelled() => Cancellation.Value.ThrowIfCancellationRequested();
+
         public static async Task<MediaInfo> ProbeAsync(string ffmpeg, string path)
         {
             Cancellation.Value.ThrowIfCancellationRequested();

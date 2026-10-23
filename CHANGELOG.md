@@ -5,6 +5,19 @@ What changed in each release. The release workflow copies a version's section in
 
 Before tagging `vX.Y.Z`, add a `## [X.Y.Z]` section at the top. The release fails if it's missing.
 
+## [1.8.0]
+
+- **Several pictures to one PDF**: select several pictures, tap the wheel key and choose **PDF**. OG Converter now asks whether to
+  **merge them into a single PDF** (a page per picture, sorted by name, with the order editable in the list) or **create a PDF for
+  each picture**, as before. It remembers your last choice. Each page is made the same way as converting that picture alone (JPEGs
+  are kept as they are, SVGs stay vector).
+- Linux (beta): the same choice when you drag several pictures from Files and pick **PDF** (individual PDFs are made one after another).
+- **Folder Icon** (Actions wheel, for folders): give a folder a coloured icon with a symbol from the built-in library (10 colours,
+  32 symbols) or your own picture, with a live preview, and **Reset to default** to undo. Drag several folders to give them all the
+  same icon. The icon is kept inside the folder, so it moves with it. Works on Windows and on Linux (GNOME Files, Nemo, Caja).
+- Fixed: a JPEG with neither a JFIF nor an Exif header (written by some web and editing tools) failed to convert to PDF with
+  "Unsupported image format". It's now embedded as a lossless PNG instead.
+
 ## [1.7.0]
 
 - **Convert many files at once**: select several files, drag them and tap the wheel key. The option you pick runs on every file it

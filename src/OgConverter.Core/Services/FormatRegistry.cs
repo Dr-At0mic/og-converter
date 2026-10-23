@@ -55,9 +55,10 @@ namespace OgConverter.Services
             // Folders only support system actions that don't read file contents
             if (Directory.Exists(filePath))
             {
-                return mode == WheelMode.Actions
-                    ? GetActionItems(filePath).FindAll(x => x.Id is "act_copy_path" or "act_reveal" or "act_terminal" or "act_zip" or "act_protect")
-                    : new List<WheelItem>();
+                if (mode != WheelMode.Actions) return new List<WheelItem>();
+                var folderItems = GetActionItems(filePath).FindAll(x => x.Id is "act_copy_path" or "act_reveal" or "act_terminal" or "act_zip" or "act_protect");
+                folderItems.Add(new WheelItem { Id = ConversionEngine.FolderIconActionId, Title = "Folder Icon", Description = "Give the folder a coloured icon from the library, or your own picture", IconGlyph = "", Mode = WheelMode.Actions });
+                return folderItems;
             }
 
             FileCategory category = DetectCategory(filePath);

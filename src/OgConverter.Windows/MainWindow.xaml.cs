@@ -219,9 +219,25 @@ namespace OgConverter
         {
             _overlay.FileActionRequested += async (files, option) =>
             {
+                // Several pictures to PDF: ask whether they go into one PDF or one each
+                if (files.Count > 1 && ConversionEngine.IsPicturesToPdf(files, option))
+                {
+                    var settings = _settingsService.Current;
+                    var dlg = new ImagesToPdfDialog(files, settings.LastImagesToPdfMerge);
+                    if (dlg.ShowDialog() != true) return;
+                    settings.LastImagesToPdfMerge = dlg.Merge;
+                    _settingsService.SaveSettings(settings);
+
+                    var pictures = dlg.Pictures;
+                    if (dlg.Merge) await ProcessJobAsync(pictures[0], option, collected: new ToolParameters { MergeInputs = pictures.ToList() });
+                    else await ProcessBatchAsync(pictures, option);
+                    return;
+                }
+
                 // Merge takes all the dragged PDFs as one job; instant actions (terminal, reveal, copy path) stay on the
-                // first file rather than opening a window per file
-                if (files.Count == 1 || option.Id == "tool_pdf_merge" || !ShowsProgress(option)) await ProcessJobAsync(files[0], option, files);
+                // first file rather than opening a window per file, except Folder Icon, which gives every folder the icon
+                if (files.Count == 1 || option.Id == "tool_pdf_merge" || (!ShowsProgress(option) && option.Id != ConversionEngine.FolderIconActionId))
+                    await ProcessJobAsync(files[0], option, files);
                 else await ProcessBatchAsync(files, option);
             };
         }
@@ -237,13 +253,16 @@ namespace OgConverter
             };
         }
 
-        /// <summary>One file (<paramref name="dragged"/>: everything that was dropped, for Merge).</summary>
-        private async Task ProcessJobAsync(string filePath, WheelItem option, IReadOnlyList<string>? dragged = null)
+        /// <summary>
+        /// One file (<paramref name="dragged"/>: everything that was dropped, for Merge). <paramref name="collected"/> is
+        /// tool input already asked for, so no dialog opens.
+        /// </summary>
+        private async Task ProcessJobAsync(string filePath, WheelItem option, IReadOnlyList<string>? dragged = null, ToolParameters? collected = null)
         {
-            ToolParameters? parameters;
+            ToolParameters? parameters = collected;
             try
             {
-                if (!TryCollectToolParameters(filePath, option, dragged, out parameters)) return; // user cancelled
+                if (collected == null && !TryCollectToolParameters(filePath, option, dragged, out parameters)) return; // user cancelled
             }
             catch (Exception ex)
             {
@@ -319,19 +338,19 @@ namespace OgConverter
                 }
 
                 string? shareKey = option.Id == ConversionEngine.CompressToolId ? "compress:" + (CompressionService.KindOf(file) ?? CompressionKind.General)
-                                 : option.Id == "act_zip" ? "zip" : null;
+                                 : option.Id is "act_zip" or ConversionEngine.FolderIconActionId ? option.Id : null;
                 ToolParameters? parameters;
                 if (shareKey != null && shared.TryGetValue(shareKey, out var first))
                 {
                     // Jobs adjust their options while running, so each gets its own copy
-                    parameters = first == null ? null : new ToolParameters { Compression = first.Compression?.Clone(), Archive = first.Archive?.Clone() };
+                    parameters = first == null ? null : new ToolParameters { Compression = first.Compression?.Clone(), Archive = first.Archive?.Clone(), FolderIcon = first.FolderIcon };
                 }
                 else
                 {
                     try
                     {
                         // Cancelling a dialog cancels the batch; nothing has started yet
-                        if (!TryCollectToolParameters(file, option, null, out parameters)) return;
+                        if (!TryCollectToolParameters(file, option, option.Id == ConversionEngine.FolderIconActionId ? files : null, out parameters)) return;
                     }
                     catch (Exception ex)
                     {
@@ -562,6 +581,23 @@ namespace OgConverter
                     var dlg = new PdfMergeDialog(files);
                     if (dlg.ShowDialog() != true) return false;
                     parameters = dlg.Result;
+                    return true;
+                }
+
+                case ConversionEngine.FolderIconActionId:
+                {
+                    // Every dragged folder gets the same icon; the dialog names them
+                    var settings = _settingsService.Current;
+                    var folders = dragged is { Count: > 1 } ? dragged.Where(Directory.Exists).ToList() : new List<string> { filePath };
+                    var dlg = new FolderIconDialog(folders, settings.LastFolderIconColor, settings.LastFolderIconSymbol);
+                    if (dlg.ShowDialog() != true || dlg.Result == null) return false;
+                    if (dlg.Result.Count > 0 && dlg.ChosenColor.Length > 0)
+                    {
+                        settings.LastFolderIconColor = dlg.ChosenColor;
+                        settings.LastFolderIconSymbol = dlg.ChosenSymbol;
+                        _settingsService.SaveSettings(settings);
+                    }
+                    parameters = new ToolParameters { FolderIcon = dlg.Result };
                     return true;
                 }
 
