@@ -1,6 +1,8 @@
 # OG Converter ⚡
 > The zero-click offline file converter for Windows and Linux (beta) (inspired by Tangerine for Mac).
 
+https://github.com/user-attachments/assets/41b370b5-cd31-4d88-9abf-65ef121058ce
+
 *Powered by pure boredom, caffeine, and living in a world with no superpowers, no magic, and no zombie apocalypse to save us from desk jobs.*
 
 Drag a file anywhere in Windows (or in your Linux file manager), tap your configured hotkey (e.g. **Shift**), and drop. Turn files into the formats you need without breaking your flow. Everything happens 100% locally on your PC.
