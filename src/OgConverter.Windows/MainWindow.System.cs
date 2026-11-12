@@ -14,6 +14,12 @@ namespace OgConverter
 
         private void RefreshInstallState()
         {
+            if (PackageService.IsPackaged)
+            {
+                RefreshStoreInstallState();
+                return;
+            }
+
             bool installed = InstallService.IsInstalled;
             bool runningInstalled = InstallService.IsRunningInstalled;
             string here = Path.GetDirectoryName(InstallService.CurrentExePath ?? string.Empty) ?? string.Empty;
@@ -57,6 +63,11 @@ namespace OgConverter
         {
             if (_syncingStartup || _settingsService == null) return;
             bool enabled = StartWithWindowsCheck.IsChecked == true;
+            if (PackageService.IsPackaged)
+            {
+                SetStoreStartup(enabled);
+                return;
+            }
             try
             {
                 InstallService.SetStartWithWindows(enabled);
@@ -68,6 +79,45 @@ namespace OgConverter
                 MessageBox.Show(this, $"Couldn't change the startup setting:\n{ex.Message}", "Start with Windows", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
             RefreshInstallState();
+        }
+
+        /// <summary>Store build: Windows installs, updates and uninstalls the package, so only "start with Windows" is ours.</summary>
+        private async void RefreshStoreInstallState()
+        {
+            InstallTitleText.Text = "Installed from the Microsoft Store";
+            InstallStatusText.Text = $"Version {InstallService.CurrentVersion}. The Microsoft Store keeps it up to date. To remove it, right-click it in Start and choose Uninstall.";
+            InstallButton.Visibility = Visibility.Collapsed;
+            UninstallButton.Visibility = Visibility.Collapsed;
+            InstallDesktopShortcutCheck.Visibility = Visibility.Collapsed;
+            InstallBanner.Visibility = Visibility.Collapsed;
+            StartupDescText.Text = "Opens quietly in the system tray when you sign in, so the wheel is always ready";
+
+            bool enabled;
+            try { enabled = await PackageService.IsStartupEnabledAsync(); }
+            catch (Exception) { enabled = false; }
+            _syncingStartup = true;
+            StartWithWindowsCheck.IsChecked = enabled;
+            _syncingStartup = false;
+        }
+
+        private async void SetStoreStartup(bool enabled)
+        {
+            try
+            {
+                var state = await PackageService.SetStartupAsync(enabled);
+                if (enabled && state == global::Windows.ApplicationModel.StartupTaskState.DisabledByUser)
+                {
+                    MessageBox.Show(this, "Starting with Windows was turned off in Task Manager › Startup apps. Turn OG Converter back on there.",
+                        "Start with Windows", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                _settingsService.Current.StartWithWindows = enabled;
+                _settingsService.SaveSettings(_settingsService.Current);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Couldn't change the startup setting:\n{ex.Message}", "Start with Windows", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            RefreshStoreInstallState();
         }
 
         private void OnInstallClick(object sender, RoutedEventArgs e) =>

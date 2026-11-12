@@ -19,10 +19,23 @@ namespace OgConverter
         {
             AboutVersionText.Text = $"Version {InstallService.CurrentVersion}  ·  Offline file conversion for Windows";
             UpdateStatusText.Text = $"You're on version {InstallService.CurrentVersion}. OG Converter only contacts GitHub when you check.";
+            if (PackageService.IsPackaged)
+            {
+                // Store policy: a Store app updates only through the Store.
+                UpdateTitleText.Text = "Updates come from the Microsoft Store";
+                UpdateStatusText.Text = $"You're on version {InstallService.CurrentVersion}. Windows installs new versions automatically through the Microsoft Store.";
+                UpdateButton.Content = "Open in Microsoft Store";
+            }
         }
 
         private async void OnUpdateClick(object sender, RoutedEventArgs e)
         {
+            if (PackageService.IsPackaged)
+            {
+                OpenUrl(PackageService.StorePageUri);
+                return;
+            }
+
             if (_updateCts != null)
             {
                 _updateCts.Cancel(); // the button reads "Cancel" while busy

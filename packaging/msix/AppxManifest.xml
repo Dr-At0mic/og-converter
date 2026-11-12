@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Microsoft Store (MSIX) manifest for OG Converter. build-msix.ps1 fills in __VERSION__ (1.8.0 -> 1.8.0.0;
+  the Store requires the fourth part to be 0) and copies this next to the published app before packing.
+  Identity values come from Partner Center (Product identity) and must match it exactly.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap desktop rescap">
+
+  <Identity
+    Name="DrAtomic.OGConverter"
+    Publisher="CN=59C61989-EB11-480C-9DAE-138946F0898B"
+    Version="__VERSION__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>OG Converter</DisplayName>
+    <PublisherDisplayName>Dr Atomic</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>The zero-click offline file converter. Drag a file, tap a key, and a radial wheel opens at your cursor to convert, compress or act on it. Everything runs on your PC.</Description>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="OGConverter" Executable="og-converter.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="OG Converter"
+        Description="The zero-click offline file converter"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square71x71Logo="Assets\SmallTile.png" Square310x310Logo="Assets\LargeTile.png" ShortName="OG Converter">
+          <uap:ShowNameOnTiles>
+            <uap:ShowOn Tile="square150x150Logo" />
+            <uap:ShowOn Tile="wide310x150Logo" />
+          </uap:ShowNameOnTiles>
+        </uap:DefaultTile>
+      </uap:VisualElements>
+      <Extensions>
+        <!-- "Start with Windows" in the Store build (PackageService.StartupTaskId). Off until the user turns it on. -->
+        <desktop:Extension Category="windows.startupTask" Executable="og-converter.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="OGConverterStartup" Enabled="false" DisplayName="OG Converter" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

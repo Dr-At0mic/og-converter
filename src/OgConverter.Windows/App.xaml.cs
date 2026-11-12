@@ -102,16 +102,21 @@ namespace OgConverter
                 return;
             }
 
-            Services.UpdateService.CleanupAfterUpdate();
-            Services.InstallService.RefreshUninstallEntryVersion();
+            // The Store package is installed and updated by Windows, so there's no self-update leftover or Apps & features entry to tend.
+            if (!Services.PackageService.IsPackaged)
+            {
+                Services.UpdateService.CleanupAfterUpdate();
+                Services.InstallService.RefreshUninstallEntryVersion();
+            }
 
             base.OnStartup(e);
 
             var main = new MainWindow { JustInstalled = Array.IndexOf(e.Args, Services.InstallService.JustInstalledArg) >= 0 };
             MainWindow = main;
-            if (Array.IndexOf(e.Args, Services.InstallService.BackgroundArg) >= 0)
+            if (Array.IndexOf(e.Args, Services.InstallService.BackgroundArg) >= 0 || Services.PackageService.LaunchedByStartupTask)
             {
-                // Started with Windows: stay in the tray. Hooks and the tray icon need the window handle, not a visible window.
+                // Started with Windows (Run entry, or the Store package's startup task): stay in the tray.
+                // Hooks and the tray icon need the window handle, not a visible window.
                 main.StartHidden();
             }
             else

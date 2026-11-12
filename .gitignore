@@ -80,3 +80,9 @@ $RECYCLE.BIN/
 .DS_Store
 
 .claude/
+# ---------------------------------------------------------------- Promotion
+# Marketing videos, generated clips and source assets (not part of the app)
+promotion/
+
+# Agent log with home-network details (LAN address, self-hosted Plane server); keep local only
+docs/agent-log/2026-11-04_1635_claudecode_plane-project-setup.md
